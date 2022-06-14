@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.0;
+pragma solidity 0.8.13;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IDCACore} from "./interfaces/IDCACore.sol";
-import {IUniswapV2Router} from "./interfaces/IUniswapV2Router.sol";
-import {IWETH} from "./external/IWETH.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./interfaces/IDCACore.sol";
+import "./interfaces/IUniswapV2Router.sol";
+import "./external/IWETH.sol";
 
 contract DCACore is IDCACore, Ownable {
     using SafeERC20 for IERC20;
@@ -19,7 +19,7 @@ contract DCACore is IDCACore, Ownable {
     mapping(address => mapping(address => bool)) public allowedTokenPairs;
     uint256 public minSlippage = 25; // 0.25%
 
-    address public constant ETH_TOKEN =
+    address public constant NATIVE_TOKEN =
         0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public immutable weth;
 
@@ -56,7 +56,7 @@ contract DCACore is IDCACore, Ownable {
     ) external payable notPaused {
         uint256 amountIn;
         address tokenIn;
-        if (_tokenIn == ETH_TOKEN) {
+        if (_tokenIn == NATIVE_TOKEN) {
             tokenIn = weth;
             IWETH(weth).deposit{value: msg.value}();
             amountIn = msg.value;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.0;
+pragma solidity 0.8.13;
 
 import {IDCACore} from "./interfaces/IDCACore.sol";
 import {IUniswapV2Router} from "./interfaces/IUniswapV2Router.sol";
