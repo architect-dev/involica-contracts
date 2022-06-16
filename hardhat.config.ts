@@ -10,16 +10,9 @@ import "solidity-coverage";
 
 import { HardhatUserConfig } from "hardhat/types";
 import {
+  FTM_FORK_URL,
+  MNEMONIC,
   ETHERSCAN_API_KEY,
-  MAINNET_PRIVATE_KEY,
-  NETWORK_FORK_URL,
-  NETWORK_MAINNET_URL,
-  NETWORK_RINKEBY_URL,
-  NETWORK_ROPSTEN_URL,
-  RINKEBY_PRIVATE_KEY,
-  ROPSTEN_PRIVATE_KEY,
-  NETWORK_POLYGON_URL,
-  POLYGON_PRIVATE_KEY,
 } from "./constants";
 
 import "./tasks/accounts";
@@ -46,30 +39,21 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {
-      initialBaseFeePerGas: 0, // workaround from https://github.com/sc-forks/solidity-coverage/issues/652#issuecomment-896330136 . Remove when that issue is closed.
-      // allowUnlimitedContractSize: true,
+      allowUnlimitedContractSize: true,
       forking: {
-        url: NETWORK_FORK_URL,
-        blockNumber: 13293605,
+        url: "https://rpc.ftm.tools",
+        blockNumber: 40423488,
       },
-      // hardfork: "berlin"
     },
-    mainnet: {
-      url: NETWORK_MAINNET_URL,
-      accounts: [MAINNET_PRIVATE_KEY],
+    ftm_testnet: {
+      url: "https://rpc.testnet.fantom.network/",
+      chainId: 0xfa2,
+      accounts: { mnemonic: MNEMONIC },
     },
-    rinkeby: {
-      url: NETWORK_RINKEBY_URL,
-      accounts: [RINKEBY_PRIVATE_KEY],
-    },
-    ropsten: {
-      url: NETWORK_ROPSTEN_URL,
-      accounts: [ROPSTEN_PRIVATE_KEY],
-    },
-    polygon: {
-      chainId: 137,
-      url: NETWORK_POLYGON_URL,
-      accounts: [POLYGON_PRIVATE_KEY],
+    ftm_mainnet: {
+      url: "https://rpc.ftm.tools/",
+      chainId: 250,
+      accounts: { mnemonic: MNEMONIC },
     },
   },
   etherscan: {

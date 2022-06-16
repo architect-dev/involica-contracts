@@ -1,35 +1,44 @@
 import { BigNumber, BigNumberish } from "ethers/lib/ethers";
 import { ethers, network } from "hardhat";
-import { USDC_ADDRESS, USDC_MINTER } from "../../constants";
-import { DCACore } from "../../typechain";
+import { USDC_ADDRESS, USDC_OWNING_WALLET } from "../../constants";
+import { PortfolioDCA } from "../../typechain";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { parseEther } from "ethers/lib/utils";
 
-export const getNextPositionId = async (
-  dcaCore: DCACore
-): Promise<BigNumber> => {
-  return await dcaCore.getNextPositionId();
-};
+export const setAllowedTokens = async (
+  portfolioDCA: PortfolioDCA,
+  tokens: string[],
+  symbols: string[],
+  alloweds: boolean[]
+) => {
+  await portfolioDCA.setAllowedTokens(tokens, symbols, alloweds)
+}
+export const setAllowedToken = async (
+  portfolioDCA: PortfolioDCA,
+  token: string,
+  symbol: string,
+  allowed: boolean
+) => {
+  await setAllowedTokens(portfolioDCA, [token], [symbol], [allowed])
+}
 
-export const setTokenPairAllowance = async (
-  dcaCore: DCACore,
-  token0: string,
-  token1: string,
-  value: boolean
-): Promise<void> => {
-  const allowed = await dcaCore.allowedTokenPairs(token0, token1);
-  if (allowed === value) return;
-  await dcaCore.setAllowedTokenPair(token0, token1, value);
-};
+export const setBlacklistedPairs = async (
+  portfolioDCA: PortfolioDCA,
+  pairs: string[][],
+  blacklisteds: boolean[]
+) => {
+  await portfolioDCA.setBlacklistedPairs(pairs.flat(), blacklisteds)
+}
 
-export const mintUsdc = async (amount: BigNumberish, to: string) => {
-  const usdc = await ethers.getContractAt("IERC20", USDC_ADDRESS[1]);
+export const mintUsdc = async (chainId: number, amount: BigNumberish, to: string) => {
+  const usdc = await ethers.getContractAt("IERC20", USDC_ADDRESS[chainId]);
 
   await network.provider.request({
     method: "hardhat_impersonateAccount",
-    params: [USDC_MINTER],
+    params: [USDC_OWNING_WALLET[chainId]],
   });
 
-  const usdcWalletSigner = await ethers.getSigner(USDC_MINTER);
+  const usdcWalletSigner = await ethers.getSigner(USDC_OWNING_WALLET[chainId]);
   await usdc.connect(usdcWalletSigner).transfer(to, amount);
 };
 
@@ -53,3 +62,5 @@ export const impersonateAccount = async (
 
   return ethers.getSigner(address);
 };
+
+export const ONE_ETH = parseEther("1")

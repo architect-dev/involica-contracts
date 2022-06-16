@@ -1,38 +1,46 @@
 import hre from "hardhat";
 import {
-  POKEME_ADDRESS,
-  SUSHISWAP_ROUTER_ADDRESS,
-  WNATIVE_ADDRESS,
+  OPS_ADDRESS,
+  ROUTER_ADDRESS,
+  WETH_ADDRESS,
+  WETH_SYMBOL,
 } from "../constants";
-import { DCACoreResolver__factory, DCACore__factory } from "../typechain";
+import { PortfolioDCAResolver__factory, PortfolioDCA__factory } from "../typechain";
 
 async function main() {
   const [signer] = await hre.ethers.getSigners();
   const chainId = 137;
 
-  const DCACoreFactory = <DCACore__factory>(
-    await hre.ethers.getContractFactory("DCACore", signer)
+  // DEPLOY PORTFOLIO DCA
+  const PortfolioDCAFactory = <PortfolioDCA__factory>(
+    await hre.ethers.getContractFactory("PortfolioDCA", signer)
   );
 
-  const dcaCore = await DCACoreFactory.deploy(
-    SUSHISWAP_ROUTER_ADDRESS[chainId],
-    POKEME_ADDRESS[chainId],
-    WNATIVE_ADDRESS[chainId]
+  const portfolioDCA = await PortfolioDCAFactory.deploy(
+    OPS_ADDRESS[chainId],
+    ROUTER_ADDRESS[chainId],
+    WETH_ADDRESS[chainId],
+    WETH_SYMBOL[chainId]
   );
-  console.log("DCACore TxHash:", dcaCore.deployTransaction.hash);
-  await dcaCore.deployed();
-  console.log("DCACore deployed to:", dcaCore.address);
+  console.log("PortfolioDCA TxHash:", portfolioDCA.deployTransaction.hash);
+  await portfolioDCA.deployed();
+  console.log("PortfolioDCA deployed to:", portfolioDCA.address);
 
-  const DCACoreResolverFactory = <DCACoreResolver__factory>(
-    await hre.ethers.getContractFactory("DCACoreResolver", signer)
+  // DEPLOY RESOLVER
+  const PortfolioDCAResolverFactory = <PortfolioDCAResolver__factory>(
+    await hre.ethers.getContractFactory("PortfolioDCAResolver", signer)
   );
-  const resolver = await DCACoreResolverFactory.deploy(
-    dcaCore.address,
-    SUSHISWAP_ROUTER_ADDRESS[chainId]
+  const resolver = await PortfolioDCAResolverFactory.deploy(
+    portfolioDCA.address,
+    ROUTER_ADDRESS[chainId]
   );
   console.log("Resolver TxHash:", resolver.deployTransaction.hash);
   await resolver.deployed();
   console.log("Resolver deployed to:", resolver.address);
+
+  // SET RESOLVER
+  await portfolioDCA.setResolver(resolver.address);
+  console.log("PortfolioDCA resolver set:", resolver.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

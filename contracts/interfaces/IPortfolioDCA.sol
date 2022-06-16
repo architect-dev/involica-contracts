@@ -50,6 +50,7 @@ interface IPortfolioDCA {
     struct TokenData {
         address token;
         string symbol;
+        uint256 decimals;
         uint256 allowance;
         uint256 balance;
     }
@@ -77,6 +78,7 @@ interface IPortfolioDCA {
     event FinalizePosition(address indexed user, string reason);
     event ExecuteDCA(address indexed user);
     event SetAllowedToken(address indexed token, bool indexed allowed, string symbol);
+    event SetBlacklistedPair(address indexed tokenA, address indexed tokenB, bool indexed blacklisted);
     event AllowedTokenPairSet(
         address indexed tokenIn,
         address indexed tokenOut,

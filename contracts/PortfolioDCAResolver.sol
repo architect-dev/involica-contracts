@@ -4,14 +4,14 @@ pragma solidity 0.8.13;
 import {IPortfolioDCA} from "./interfaces/IPortfolioDCA.sol";
 import {IUniswapV2Router} from "./interfaces/IUniswapV2Router.sol";
 
-contract DCACoreResolver {
-    IPortfolioDCA public dcaCore;
+contract PortfolioDCAResolver {
+    IPortfolioDCA public portfolioDCA;
     IUniswapV2Router public uniRouter;
 
     address public owner;
 
-    constructor(address _dcaCore, address _uniRouter) {
-        dcaCore = IPortfolioDCA(_dcaCore);
+    constructor(address _portfolioDCA, address _uniRouter) {
+        portfolioDCA = IPortfolioDCA(_portfolioDCA);
         uniRouter = IUniswapV2Router(_uniRouter);
         owner = msg.sender;
     }
@@ -22,7 +22,7 @@ contract DCACoreResolver {
         view
         returns (bool canExec, bytes memory execPayload)
     {
-        IPortfolioDCA.Position memory position = dcaCore.getPosition(_user);
+        IPortfolioDCA.Position memory position = portfolioDCA.getPosition(_user);
 
         if (block.timestamp < (position.lastDCA + position.intervalDCA)) return (false, bytes("Position not ready"));
         if (position.maxGasPrice > 0 && tx.gasprice > position.maxGasPrice) return (false, bytes("Gas too expensive"));

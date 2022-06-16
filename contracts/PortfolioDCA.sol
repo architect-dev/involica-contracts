@@ -4,14 +4,15 @@ pragma solidity 0.8.13;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./external/OpsReady.sol";
 import "./interfaces/IPortfolioDCA.sol";
 import "./interfaces/IUniswapV2Router.sol";
 import "./external/IWETH.sol";
+import "./interfaces/IERC20Ext.sol";
+import "hardhat/console.sol";
 
-contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyGuard, Initializable {
+contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.UintSet;
@@ -46,8 +47,13 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         _setAllowedToken(_weth, _wethSymbol, true);
     }
 
-    function initialize(address _resolver) public onlyOwner initializer {
+    function setResolver(address _resolver) public onlyOwner {
+        require(_resolver != address(0), "Missing resolver");
         resolver = _resolver;
+    }
+    function setPaused(bool _setPause) public onlyOwner {
+        if (_setPause) _pause();
+        else _unpause();
     }
 
     function setAllowedTokens(
@@ -72,6 +78,24 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         tokenSymbols[_token] = _symbol;
         emit SetAllowedToken(_token, _allowed, _symbol);
     }
+    function setBlacklistedPairs(
+        address[] calldata _tokens,
+        bool[] calldata _blacklisteds
+    ) public onlyOwner {
+        require(_tokens.length == (_blacklisteds.length * 2), "Invalid length");
+
+        for (uint256 i = 0; i < _blacklisteds.length; i++) {
+            _setBlacklistedPairs(_tokens[i * 2], _tokens[i * 2 + 1], _blacklisteds[i]);
+        }
+    }
+    function _setBlacklistedPairs(
+        address _tokenA,
+        address _tokenB,
+        bool _blacklisted
+    ) internal {
+        blacklistedPairs[_tokenA][_tokenB] = _blacklisted;
+        emit SetBlacklistedPair(_tokenA, _tokenB, _blacklisted);
+    }
 
     function getPosition(address _user) public view override returns (Position memory) {
         return positions[_user];
@@ -92,7 +116,7 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         );
     }
 
-    function createPosition(
+    function setPosition(
         uint256 _treasuryAmount,
         address _tokenIn,
         address[] memory _tokensOut,
@@ -103,6 +127,11 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         uint256[] memory _maxSlippages,
         uint256 _maxGasPrice
     ) public payable whenNotPaused {
+        require(_amountDCA > 0, "DCA amount must be > 0");
+        require(_intervalDCA >= 60, "DCA interval must be > 60s");
+
+        usersWithPositions.add(msg.sender);
+        Position storage position = positions[msg.sender];
 
         // Handle deposit
         uint256 amountIn;
@@ -120,22 +149,24 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
             );
             amountIn = _amountIn;
         }
-        require(allowedTokens.contains(tokenIn), "Invalid in token");
+        require(allowedTokens.contains(tokenIn), "Invalid token");
 
         // Clean up previous position
-        if (positions[msg.sender].user == msg.sender) {
+        if (position.user == msg.sender) {
             // Remove previous tokenIn if differs
-            if (tokenIn != positions[msg.sender].tokenIn && positions[msg.sender].balanceIn > 0) {
-                _withdrawTokenIn(positions[msg.sender], positions[msg.sender].balanceIn);
+            if (tokenIn != position.tokenIn && position.balanceIn > 0) {
+                _withdrawTokenIn(position, position.balanceIn);
             }
 
-            _withdrawTokensOut(positions[msg.sender]);
+            _withdrawTokensOut(position);
         }
 
         // Validate pair
         require(_tokensOut.length == _weights.length, "Lengths dont match");
         require(_tokensOut.length == _maxSlippages.length, "Lengths dont match");
-        PositionOut[] memory tokensOut = new PositionOut[](_tokensOut.length);
+
+        // Add tokens to position
+        delete position.tokensOut;
         uint256 weightsSum = 0;
         for (uint256 i = 0; i < _tokensOut.length; i++) {
             require(
@@ -147,18 +178,16 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
                 "Invalid token data"
             );
             weightsSum += _weights[i];
-            tokensOut[i] = PositionOut({
+            position.tokensOut.push(PositionOut({
                 token: _tokensOut[i],
                 weight: _weights[i],
                 maxSlippage: _maxSlippages[i],
                 balance: 0
-            });
+            }));
         }
         require(weightsSum == 10_000, "Incorrect weights");
 
         // Set Data
-        usersWithPositions.add(msg.sender);
-        Position storage position = positions[msg.sender];
         position.user = msg.sender;
 
         position.treasury += _treasuryAmount;
@@ -168,14 +197,12 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         require(position.balanceIn >= _amountDCA, "Deposit for at least 1 DCA");
 
         position.tokenIn = tokenIn;
-        position.tokensOut = tokensOut;
 
         position.amountDCA = _amountDCA;
         position.intervalDCA = _intervalDCA;
         position.maxGasPrice = _maxGasPrice;
 
-
-        emit SetPosition(msg.sender, tokenIn, tokensOut, _amountDCA, _intervalDCA, _maxGasPrice);
+        emit SetPosition(msg.sender, tokenIn, position.tokensOut, _amountDCA, _intervalDCA, _maxGasPrice);
         emit Deposit(msg.sender, tokenIn, amountIn);
         emit DepositToTreasury(msg.sender, _treasuryAmount);
 
@@ -305,7 +332,7 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         positions[_user].user = address(0);
     }
 
-    function executeDCA(address _user, DCAExtraData[] calldata extraData)
+    function executeDCA(address _user, DCAExtraData[] memory extraData)
         public
         override
         whenNotPaused
@@ -338,9 +365,17 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         );
 
         // Perform swaps
+        _executeDCASwaps(position, extraData);
+
+        emit ExecuteDCA(_user);
+    }
+
+    function _executeDCASwaps(Position storage position, DCAExtraData[] memory extraData) internal {
+        UserTx storage userTx = userTxs[position.user][userTxs[position.user].length];
+        userTx.timestamp = block.timestamp;
+
         uint256[] memory amounts;
         bool validPair;
-        UserTokenTx[] memory tokenTxs = new UserTokenTx[](position.tokensOut.length);
         string memory swapErrReason;
         bool swapErr;
         for (uint256 i = 0; i < position.tokensOut.length; i++) {
@@ -356,7 +391,7 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
                     position.tokensOut[i].balance += amounts[amounts.length - 1];
                 }
             }
-            tokenTxs[i] = UserTokenTx({
+            userTx.tokenTxs[i] = UserTokenTx({
                 tokenIn: position.tokenIn,
                 tokenOut: position.tokensOut[i].token,
                 amountIn: validPair && !swapErr ? position.amountDCA * position.tokensOut[i].weight / 10_000 : 0,
@@ -366,12 +401,7 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         }
 
         // Store results
-        userTxs[position.user].push(UserTx({
-            timestamp: block.timestamp,
-            tokenTxs: tokenTxs
-        }));
-
-        emit ExecuteDCA(_user);
+        userTxs[position.user].push(userTx);
     }
 
     function _positionShouldBeFinalized(Position memory _position, uint256 txFee)
@@ -448,6 +478,7 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
             tokens[i] = TokenData({
                 token: allowedTokens.at(i),
                 symbol: tokenSymbols[allowedTokens.at(i)],
+                decimals: IERC20Ext(allowedTokens.at(i)).decimals(),
                 allowance: allowedTokens.at(i) == NATIVE_TOKEN ?
                     type(uint256).max :
                     IERC20(allowedTokens.at(i)).allowance(_user, address(this)),
