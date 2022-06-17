@@ -37,6 +37,18 @@ export const WETH_SYMBOL: { [key: number]: string } = {
   137: "wMATIC",
   250: "wFTM",
 }
+export const WBTC_ADDRESS: { [key: number]: string } = {
+  1: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+  3: "0xc778417e063141139fce010982780140aa0cd5ab",
+  137: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
+  250: "0x321162Cd933E2Be498Cd2267a90534A804051b11",
+};
+export const WBTC_SYMBOL: { [key: number]: string } = {
+  1: "wBTC",
+  3: "wBTC",
+  137: "wBTC",
+  250: "wBTC",
+}
 export const USDC_ADDRESS: { [key: number]: string } = {
   1: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
   3: "0x07865c6e87b9f70255377e024ace6630c1eaa37f",
@@ -49,4 +61,9 @@ export const USDC_OWNING_WALLET: { [key: number]: string } = {
   1: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
   3: "0x07865c6e87b9f70255377e024ace6630c1eaa37f",
   250: "0xddf169bf228e6d6e701180e2e6f290739663a784",
+};
+export const WBTC_OWNING_WALLET: { [key: number]: string } = {
+  1: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  3: "0x07865c6e87b9f70255377e024ace6630c1eaa37f",
+  250: "0xa13910b72ce4c31f08c84842ff0a707f1c4db389",
 };

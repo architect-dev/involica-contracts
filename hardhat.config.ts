@@ -10,7 +10,6 @@ import "solidity-coverage";
 
 import { HardhatUserConfig } from "hardhat/types";
 import {
-  FTM_FORK_URL,
   MNEMONIC,
   ETHERSCAN_API_KEY,
 } from "./constants";
@@ -42,7 +41,7 @@ const config: HardhatUserConfig = {
       allowUnlimitedContractSize: true,
       forking: {
         url: "https://rpc.ftm.tools",
-        blockNumber: 40423488,
+        blockNumber: 40713407,
       },
     },
     ftm_testnet: {

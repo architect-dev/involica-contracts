@@ -29,6 +29,13 @@ export const setBlacklistedPairs = async (
 ) => {
   await portfolioDCA.setBlacklistedPairs(pairs.flat(), blacklisteds)
 }
+export const setBlacklistedPair = async (
+  portfolioDCA: PortfolioDCA,
+  pair: string[],
+  blacklisted: boolean
+) => {
+  await setBlacklistedPairs(portfolioDCA, [pair], [blacklisted])
+}
 
 export const mintUsdc = async (chainId: number, amount: BigNumberish, to: string) => {
   const usdc = await ethers.getContractAt("IERC20", USDC_ADDRESS[chainId]);

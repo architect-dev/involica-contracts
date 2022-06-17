@@ -17,9 +17,16 @@ interface IPortfolioDCA {
     }
 
 
+    struct TokenOutParams {
+        address token;
+        uint256 weight;
+        address[] route;
+        uint256 maxSlippage;
+    }
     struct PositionOut {
         address token;
         uint256 weight;
+        address[] route;
         uint256 maxSlippage;
         uint256 balance;
     }
@@ -38,13 +45,6 @@ interface IPortfolioDCA {
 
         bytes32 taskId;
         string finalizationReason;
-    }
-
-    struct DCAExtraData {
-        // minimal swap output amount to prevent manipulation
-        uint256 swapAmountOutMin;
-        // swap path
-        address[] swapPath;
     }
 
     struct TokenData {
@@ -75,7 +75,8 @@ interface IPortfolioDCA {
     event Deposit(address indexed user, address indexed tokenIn, uint256 indexed amount);
     event WithdrawTokenIn(address indexed user, address indexed tokenIn, uint256 indexed amount);
     event WithdrawTokensOut(address indexed user, address[] indexed tokens, uint256[] indexed amounts);
-    event FinalizePosition(address indexed user, string reason);
+    event InitializeTask(address indexed user, bytes32 taskId);
+    event FinalizeTask(address indexed user, string reason);
     event ExecuteDCA(address indexed user);
     event SetAllowedToken(address indexed token, bool indexed allowed, string symbol);
     event SetBlacklistedPair(address indexed tokenA, address indexed tokenB, bool indexed blacklisted);
@@ -87,5 +88,5 @@ interface IPortfolioDCA {
     event MinSlippageSet(uint256 indexed minSlippage);
 
     function getPosition(address) external view returns (Position memory);
-    function executeDCA(address, DCAExtraData[] calldata) external; 
+    function executeDCA(address, uint256[] calldata) external; 
 }

@@ -30,7 +30,7 @@ contract PortfolioDCAResolver {
 
         address[] memory path;
         uint256[] memory amounts;
-        IPortfolioDCA.DCAExtraData[] memory extraData = new IPortfolioDCA.DCAExtraData[](position.tokensOut.length);
+        uint256[] memory swapsAmountOutMin = new uint256[](position.tokensOut.length);
         for (uint256 i = 0; i < position.tokensOut.length; i++) {
             path = new address[](2);
             path[0] = position.tokenIn;
@@ -40,16 +40,13 @@ contract PortfolioDCAResolver {
                 position.amountDCA,
                 path
             );
-            extraData[i] = IPortfolioDCA.DCAExtraData({
-                swapAmountOutMin: amounts[1] * (10_000 - position.tokensOut[i].maxSlippage) / 10_000,
-                swapPath: path
-            });
+            swapsAmountOutMin[i] = amounts[1] * (10_000 - position.tokensOut[i].maxSlippage) / 10_000;
         }
 
         execPayload = abi.encodeWithSelector(
             IPortfolioDCA.executeDCA.selector,
             _user,
-            extraData
+            swapsAmountOutMin
         );
     }
 }

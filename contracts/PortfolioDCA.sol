@@ -116,15 +116,25 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         );
     }
 
+    function _validRoute(address _tokenIn, uint256 _amountIn, TokenOutParams memory _tokenOut) internal view returns (bool) {
+        if (
+            _tokenIn != _tokenOut.route[0] ||
+            _tokenOut.token != _tokenOut.route[_tokenOut.route.length - 1]
+        ) return false;
+        try uniRouter.getAmountsOut(_amountIn * _tokenOut.weight / 10_000, _tokenOut.route) {
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     function setPosition(
         uint256 _treasuryAmount,
         address _tokenIn,
-        address[] memory _tokensOut,
-        uint256[] memory _weights,
+        TokenOutParams[] memory _tokensOut,
         uint256 _amountIn,
         uint256 _amountDCA,
         uint256 _intervalDCA,
-        uint256[] memory _maxSlippages,
         uint256 _maxGasPrice
     ) public payable whenNotPaused {
         require(_amountDCA > 0, "DCA amount must be > 0");
@@ -149,7 +159,7 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
             );
             amountIn = _amountIn;
         }
-        require(allowedTokens.contains(tokenIn), "Invalid token");
+        require(allowedTokens.contains(tokenIn), "Token is not allowed");
 
         // Clean up previous position
         if (position.user == msg.sender) {
@@ -161,34 +171,9 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
             _withdrawTokensOut(position);
         }
 
-        // Validate pair
-        require(_tokensOut.length == _weights.length, "Lengths dont match");
-        require(_tokensOut.length == _maxSlippages.length, "Lengths dont match");
-
-        // Add tokens to position
-        delete position.tokensOut;
-        uint256 weightsSum = 0;
-        for (uint256 i = 0; i < _tokensOut.length; i++) {
-            require(
-                _tokensOut[i] != tokenIn &&
-                allowedTokens.contains(_tokensOut[i]) &&
-                !blacklistedPairs[tokenIn][_tokensOut[i]] &&
-                _maxSlippages[i] >= minSlippage &&
-                _weights[i] > 0,
-                "Invalid token data"
-            );
-            weightsSum += _weights[i];
-            position.tokensOut.push(PositionOut({
-                token: _tokensOut[i],
-                weight: _weights[i],
-                maxSlippage: _maxSlippages[i],
-                balance: 0
-            }));
-        }
-        require(weightsSum == 10_000, "Incorrect weights");
-
         // Set Data
         position.user = msg.sender;
+        position.tokenIn = tokenIn;
 
         position.treasury += _treasuryAmount;
         require(position.treasury > 0, "Treasury must not be 0");
@@ -196,22 +181,43 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         position.balanceIn += amountIn;
         require(position.balanceIn >= _amountDCA, "Deposit for at least 1 DCA");
 
-        position.tokenIn = tokenIn;
-
         position.amountDCA = _amountDCA;
         position.intervalDCA = _intervalDCA;
         position.maxGasPrice = _maxGasPrice;
 
+        // Add tokens to position
+        delete position.tokensOut;
+        uint256 weightsSum = 0;
+        for (uint256 i = 0; i < _tokensOut.length; i++) {
+            require(_tokensOut[i].token != tokenIn, "Same token both sides of pair");
+            require(allowedTokens.contains(_tokensOut[i].token), "Token is not allowed");
+            require(!blacklistedPairs[tokenIn][_tokensOut[i].token], "Pair is blacklisted");
+            require(_tokensOut[i].maxSlippage >= minSlippage, "Invalid slippage");
+            require(_tokensOut[i].weight > 0, "Non zero weight");
+            require(_validRoute(tokenIn, position.amountDCA, _tokensOut[i]), "Invalid route");
+            weightsSum += _tokensOut[i].weight;
+            position.tokensOut.push(PositionOut({
+                token: _tokensOut[i].token,
+                weight: _tokensOut[i].weight,
+                route: _tokensOut[i].route,
+                maxSlippage: _tokensOut[i].maxSlippage,
+                balance: 0
+            }));
+        }
+        require(weightsSum == 10_000, "Weights do not sum to 10000");
+
+
         emit SetPosition(msg.sender, tokenIn, position.tokensOut, _amountDCA, _intervalDCA, _maxGasPrice);
-        emit Deposit(msg.sender, tokenIn, amountIn);
-        emit DepositToTreasury(msg.sender, _treasuryAmount);
+        if (amountIn > 0) emit Deposit(msg.sender, tokenIn, amountIn);
+        if (_treasuryAmount > 0) emit DepositToTreasury(msg.sender, _treasuryAmount);
 
         // New position needs to be initialized (must call from array of positions to persist taskId)
-        _initializeTaskIfNecessary(positions[msg.sender]);
+        _checkAndInitializeTask(positions[msg.sender]);
     }
 
-    function _initializeTaskIfNecessary(Position storage _position) internal {
+    function _checkAndInitializeTask(Position storage _position) internal {
         if (_position.balanceIn < _position.amountDCA) return;
+        if (_position.treasury == 0) return;
         if (_position.taskId != bytes32(0)) return;
 
         _position.taskId = IOps(ops).createTimedTask(
@@ -224,32 +230,40 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
             NATIVE_TOKEN,
             false
         );
+
+        emit InitializeTask(_position.user, _position.taskId);
     }
 
     function depositToTreasury() public payable whenNotPaused positionExists {
         require(msg.value > 0, "msg.value must be > 0");
-        IWETH(weth).deposit{value: msg.value}();
         positions[msg.sender].treasury += msg.value;
+
         emit DepositToTreasury(msg.sender, msg.value);
+
+        _checkAndInitializeTask(positions[msg.sender]);
     }
 
     function withdrawFromTreasury(uint256 _amount) public positionExists {
         require(_amount > 0, "_amount must be > 0");
+        require(_amount <= positions[msg.sender].treasury, "Bad withdraw");
         _withdrawFromTreasury(_amount);
+
+        _checkAndFinalizeTask(positions[msg.sender], 0);
     }
     function _withdrawFromTreasury(uint256 _amount) internal {
-        _transferTokenOrNative(payable(msg.sender), weth, _amount);
+        (bool success, ) = payable(msg.sender).call{value: _amount}("");
+        require(success, "ETH transfer failed");
         positions[msg.sender].treasury -= _amount;
         emit WithdrawFromTreasury(msg.sender, _amount);
     }
 
-    function deposit(address _tokenIn, uint256 _amountIn) public payable whenNotPaused positionExists {
+    function deposit(uint256 _amountIn) public payable whenNotPaused positionExists {
         uint256 amountIn;
-        if (_tokenIn == NATIVE_TOKEN) {
+        if (positions[msg.sender].tokenIn == weth && msg.value > 0) {
             IWETH(weth).deposit{value: msg.value}();
             amountIn = msg.value;
         } else {
-            IERC20(_tokenIn).safeTransferFrom(
+            IERC20(positions[msg.sender].tokenIn).safeTransferFrom(
                 msg.sender,
                 address(this),
                 _amountIn
@@ -261,7 +275,9 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
 
         positions[msg.sender].balanceIn += amountIn;
 
-        emit Deposit(msg.sender, _tokenIn, amountIn);
+        emit Deposit(msg.sender, positions[msg.sender].tokenIn, amountIn);
+
+        _checkAndInitializeTask(positions[msg.sender]);
     }
 
     function withdrawTokenIn(uint256 _amount) public positionExists {
@@ -269,13 +285,11 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         require(positions[msg.sender].balanceIn >= _amount, "Bad withdraw");
         _withdrawTokenIn(positions[msg.sender], _amount);
 
-        if (positions[msg.sender].balanceIn == 0) {
-            _finalizePosition(positions[msg.sender], "User Exited");
-        }
+        _checkAndFinalizeTask(positions[msg.sender], 0);
     }
     function _withdrawTokenIn(Position storage _position, uint256 _amount) internal {
         _position.balanceIn -= _amount;
-        _transferTokenOrNative(payable(_position.user), _position.tokenIn, _amount);
+        _transferTo(payable(_position.user), _position.tokenIn, _amount);
         emit WithdrawTokenIn(_position.user, _position.tokenIn, _amount);
     }
 
@@ -289,7 +303,7 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
             tokens[i] = _position.tokensOut[i].token;
             amounts[i] = _position.tokensOut[i].balance;
             if (_position.tokensOut[i].balance > 0) {
-                _transferTokenOrNative(payable(_position.user), _position.tokensOut[i].token, _position.tokensOut[i].balance);
+                _transferTo(payable(_position.user), _position.tokensOut[i].token, _position.tokensOut[i].balance);
                 _position.tokensOut[i].balance = 0;
             }
         }
@@ -297,22 +311,40 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
     }
 
 
-    function _finalizePosition(Position storage _position, string memory _reason) internal {
+    function _checkAndFinalizeTask(Position storage _position, uint256 _txFee) internal returns (bool) {
+        if (_position.balanceIn < _position.amountDCA) {
+            // Finalize: Insufficient funds
+            _finalizeTask(_position, "Insufficient funds");
+            return true;
+        }
+        if (_position.treasury <= _txFee) {
+
+            if (_txFee > 0) {
+                // Treasury is less than current tx fee, which is non-zero
+                // Empty remainder of user's treasury
+                _position.treasury = 0;
+            }
+
+            // Finalize: Treasury empty
+            _finalizeTask(_position, "Treasury out of gas");
+            return true;
+        }
+        return false;
+    }
+
+    function _finalizeTask(Position storage _position, string memory _reason) internal {
         if (_position.taskId == bytes32(0)) return;
 
-        // TODO: End timer task
+        IOps(ops).cancelTask(_position.taskId);
         _position.taskId = bytes32(0);
         _position.finalizationReason = _reason;
 
-        emit FinalizePosition(_position.user, _reason);
+        emit FinalizeTask(_position.user, _reason);
     }
     
 
-    function exitPosition(address _user) public positionExists {
-        _exitPosition(_user);
-    }
-    function _exitPosition(address _user) internal {
-        Position storage position = positions[_user];
+    function exitPosition() public positionExists {
+        Position storage position = positions[msg.sender];
 
         // Remove in token
         if (position.balanceIn > 0) {
@@ -326,13 +358,14 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
         _withdrawFromTreasury(position.treasury);
 
         // Stop task
-        _finalizePosition(position, "User Exited");
+        _finalizeTask(position, "User exited");
 
         // Clear data
-        positions[_user].user = address(0);
+        position.user = address(0);
+        usersWithPositions.remove(msg.sender);
     }
 
-    function executeDCA(address _user, DCAExtraData[] memory extraData)
+    function executeDCA(address _user, uint256[] calldata swapsAmountOutMin)
         public
         override
         whenNotPaused
@@ -340,38 +373,38 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
     {
         Position storage position = positions[_user];
         require(position.user == _user, "User doesnt have a position");
+        require(block.timestamp >= position.lastDCA + position.intervalDCA, "DCA not mature");
+        position.lastDCA = block.timestamp;
 
         // Validate extraData length
-        require(position.tokensOut.length == extraData.length, "Invalid extra data");
+        require(position.tokensOut.length == swapsAmountOutMin.length, "Invalid extra data");
 
-        (uint256 fee, address feeToken) = IOps(ops).getFeeDetails();
-        _transfer(fee, feeToken);
+        (uint256 fee,) = IOps(ops).getFeeDetails();
+        _transfer(fee, NATIVE_TOKEN);
 
-
-        (bool finalize, string memory finalizeReason, uint8 finalizeCode) = _positionShouldBeFinalized(position, fee);
-        if (finalize) {
-             // Clear user treasury if they don't have gas money to pay for tx
-            if (finalizeCode == 2) position.treasury = 0;
-            _finalizePosition(position, finalizeReason);
-            return;
-        }
+        // Check if tx will fail or treasury won't cover gas
+        bool finalized = _checkAndFinalizeTask(position, fee);
+        // Exit if tx will fail
+        if (finalized) return;
 
         // Take transaction fee out of users treasury
         position.treasury -= fee;
 
+        // Approve swap in amount
         IERC20(position.tokenIn).approve(
             address(uniRouter),
             position.amountDCA
         );
 
         // Perform swaps
-        _executeDCASwaps(position, extraData);
+        _executeDCASwaps(position, swapsAmountOutMin);
 
         emit ExecuteDCA(_user);
     }
 
-    function _executeDCASwaps(Position storage position, DCAExtraData[] memory extraData) internal {
-        UserTx storage userTx = userTxs[position.user][userTxs[position.user].length];
+    function _executeDCASwaps(Position storage position, uint256[] memory swapsAmountOutMin) internal {
+        userTxs[position.user].push();
+        UserTx storage userTx = userTxs[position.user][userTxs[position.user].length - 1];
         userTx.timestamp = block.timestamp;
 
         uint256[] memory amounts;
@@ -383,39 +416,22 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
             if (validPair) {
                 (amounts, swapErr, swapErrReason) = _swap(
                     position.amountDCA * position.tokensOut[i].weight / 10_000,
-                    extraData[i].swapAmountOutMin,
-                    extraData[i].swapPath
+                    swapsAmountOutMin[i],
+                    position.tokensOut[i].route
                 );
                 if (!swapErr) {
                     position.balanceIn -= position.amountDCA * position.tokensOut[i].weight / 10_000;
                     position.tokensOut[i].balance += amounts[amounts.length - 1];
                 }
             }
-            userTx.tokenTxs[i] = UserTokenTx({
+            userTx.tokenTxs.push(UserTokenTx({
                 tokenIn: position.tokenIn,
                 tokenOut: position.tokensOut[i].token,
                 amountIn: validPair && !swapErr ? position.amountDCA * position.tokensOut[i].weight / 10_000 : 0,
                 amountOut: validPair && !swapErr ? amounts[amounts.length - 1] : 0,
-                err: swapErr ? swapErrReason : validPair ? "" : "Invalid pair"
-            });
+                err: swapErr ? swapErrReason : !validPair ? "Invalid pair" : ""
+            }));
         }
-
-        // Store results
-        userTxs[position.user].push(userTx);
-    }
-
-    function _positionShouldBeFinalized(Position memory _position, uint256 txFee)
-        internal
-        pure
-        returns (bool finalize, string memory reason, uint8 code)
-    {
-        if (_position.balanceIn < _position.amountDCA) {
-            return (true, "Insufficient funds", 1);
-        }
-        if (txFee > _position.treasury) {
-            return (true, "Treasury out of gas", 2);
-        }
-        return (false, "", 0);
     }
 
     function _swap(
@@ -437,8 +453,8 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
             err = true;
         }
     }
-
-    function _transferTokenOrNative(
+    
+    function _transferTo(
         address payable _to,
         address _token,
         uint256 _amount
@@ -454,7 +470,7 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
 
     function setMinSlippage(uint256 _minSlippage) public onlyOwner {
         require(minSlippage != _minSlippage, "Same slippage value");
-        require(_minSlippage <= 1000, "Min slippage too large"); // sanity check max slippage under 10%
+        require(_minSlippage <= 1000, "Min slippage too large");
         minSlippage = _minSlippage;
 
         emit MinSlippageSet(_minSlippage);
@@ -465,13 +481,22 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
 
 
     // FETCHING
+    function fetchAllowedTokens() public view returns (address[] memory) {
+        return allowedTokens.values();
+    }
     function fetchData(
         address _user
     ) public view returns (
+        bool userHasPosition,
         Position memory position,
+        UserTx[] memory txs,
         TokenData[] memory tokens
     ) {
+        userHasPosition = usersWithPositions.contains(_user);
+
         position = positions[_user];
+
+        txs = userTxs[_user];
 
         tokens = new TokenData[](allowedTokens.length());
         for (uint256 i = 0; i < allowedTokens.length(); i++) {
