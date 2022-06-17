@@ -1,4 +1,4 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import {
   PortfolioDCA,
   PortfolioDCAResolver,
@@ -11,274 +11,297 @@ import chai from "chai";
 import { solidity } from "ethereum-waffle";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import {
+  ETH_TOKEN_ADDRESS,
+  OPS_ADDRESS,
   ROUTER_ADDRESS,
   USDC_ADDRESS,
   USDC_DECIMALS,
+  WBTC_ADDRESS,
   WETH_ADDRESS,
+  WETH_SYMBOL,
 } from "../../constants";
 import { BigNumber, BigNumberish } from "@ethersproject/bignumber";
 import {
-  fastForwardTo,
-  getCurrentTimestamp,
   mintUsdc,
+  parseGwei,
 } from "../helpers/utils";
 import { parseUnits } from "@ethersproject/units";
 import { Contract } from "ethers/lib/ethers";
+import { parseEther, toUtf8String } from "ethers/lib/utils";
 
 const { expect } = chai;
 chai.use(solidity);
 
-// describe("PortfolioDCAResolver", function () {
-//   let deployer: SignerWithAddress;
-//   let alice: SignerWithAddress;
-//   let bob: SignerWithAddress;
-//   let deployerAddress: string;
-//   let aliceAddress: string;
-//   let bobAddress: string;
+describe("PortfolioDCAResolver", function () {
+  let deployer: SignerWithAddress;
+  let alice: SignerWithAddress;
+  let bob: SignerWithAddress;
+  let deployerAddress: string;
+  let aliceAddress: string;
+  let bobAddress: string;
 
-//   let portfolioDCA: PortfolioDCA;
-//   let resolver: PortfolioDCAResolver;
-//   let uniRouter: Contract;
+  let ops: SignerWithAddress;
+  let opsAddress: string;
 
-//   let usdc: IERC20;
-//   let weth: IERC20;
+  let portfolioDCA: PortfolioDCA;
+  let resolver: PortfolioDCAResolver;
+  let uniRouter: Contract;
 
-//   let defaultFund: BigNumber;
-//   let defaultDCA: BigNumber;
-//   let defaultInterval: BigNumberish;
-//   let defaultSwapPath: string[];
-//   let defaultSlippage: BigNumber;
+  let usdc: IERC20;
+  let weth: IERC20;
+  let wbtc: IERC20;
 
-//   let snapshotId: string;
-//   const chainId = 1;
+  let defaultTreasuryFund: BigNumber;
+  let defaultFund: BigNumber;
+  let defaultEtherFund: BigNumber;
+  let defaultDCA: BigNumber;
+  let defaultEtherDCA: BigNumber;
+  let defaultInterval: BigNumberish;
+  let defaultGasPrice: BigNumberish
+  let defaultSlippage: BigNumber;
+  let usdcSwapRoute: string[];
+  let wethSwapRoute: string[];
+  let wbtcSwapRoute: string[];
 
-//   before("setup contracts", async () => {
-//     [deployer, alice, bob] = await ethers.getSigners();
-//     deployerAddress = deployer.address;
-//     aliceAddress = alice.address;
-//     bobAddress = bob.address;
+  let snapshotId: string;
+  const chainId = 250;
 
-//     usdc = <IERC20>await ethers.getContractAt("IERC20", USDC_ADDRESS[chainId]);
-//     weth = <IERC20>await ethers.getContractAt("IERC20", WETH_ADDRESS[chainId]);
+  before("setup contracts", async () => {
+    [deployer, alice, bob] = await ethers.getSigners();
+    deployerAddress = deployer.address;
+    aliceAddress = alice.address;
+    bobAddress = bob.address;
 
-//     defaultFund = parseUnits("10000", USDC_DECIMALS);
-//     defaultDCA = defaultFund.div(10);
-//     defaultInterval = 60; // second;
-//     defaultSwapPath = [USDC_ADDRESS[chainId], weth.address];
+    usdc = <IERC20>await ethers.getContractAt("IERC20", USDC_ADDRESS[chainId]);
+    weth = <IERC20>await ethers.getContractAt("IERC20", WETH_ADDRESS[chainId]);
+    wbtc = <IERC20>await ethers.getContractAt("IERC20", WBTC_ADDRESS[chainId]);
 
-//     const PortfolioDCAFactory = (await ethers.getContractFactory(
-//       "PortfolioDCA",
-//       deployer
-//     )) as PortfolioDCA__factory;
-//     portfolioDCA = await PortfolioDCAFactory.deploy(
-//       ROUTER_ADDRESS[chainId],
-//       deployerAddress,
-//       weth.address
-//     );
-//     await portfolioDCA.deployed();
-//     defaultSlippage = await portfolioDCA.minSlippage();
+    defaultTreasuryFund = parseEther("0.5");
+    defaultFund = parseUnits("10000", USDC_DECIMALS);
+    defaultEtherFund = parseEther("1000")
+    defaultDCA = defaultFund.div(10);
+    defaultEtherDCA = defaultEtherFund.div(10);
+    defaultInterval = 60; // second;
+    usdcSwapRoute = [weth.address, usdc.address];
+    wethSwapRoute = [usdc.address, weth.address];
+    wbtcSwapRoute = [usdc.address, weth.address, wbtc.address];
+    defaultGasPrice = 100;
 
-//     const PortfolioDCAResolverFactory = (await ethers.getContractFactory(
-//       "PortfolioDCAResolver",
-//       deployer
-//     )) as PortfolioDCAResolver__factory;
-//     resolver = await PortfolioDCAResolverFactory.deploy(
-//       portfolioDCA.address,
-//       ROUTER_ADDRESS[chainId]
-//     );
-//     await resolver.deployed();
+    const PortfolioDCAFactory = (await ethers.getContractFactory(
+      "PortfolioDCA",
+      deployer
+    )) as PortfolioDCA__factory;
+    portfolioDCA = await PortfolioDCAFactory.deploy(
+      OPS_ADDRESS[chainId],
+      ROUTER_ADDRESS[chainId],
+      weth.address,
+      WETH_SYMBOL[chainId]
+    );
+    await portfolioDCA.deployed();
+    defaultSlippage = await portfolioDCA.minSlippage();
 
-//     uniRouter = await ethers.getContractAt(
-//       "IUniswapV2Router",
-//       ROUTER_ADDRESS[chainId]
-//     );
+    const PortfolioDCAResolverFactory = (await ethers.getContractFactory(
+      "PortfolioDCAResolver",
+      deployer
+    )) as PortfolioDCAResolver__factory;
+    resolver = await PortfolioDCAResolverFactory.deploy(
+      portfolioDCA.address,
+      ROUTER_ADDRESS[chainId]
+    );
+    await resolver.deployed();
 
-//     await portfolioDCA
-//       .connect(deployer)
-//       .setAllowedTokenPair(usdc.address, weth.address, true);
+    await portfolioDCA.connect(deployer).setResolver(resolver.address)
 
-//     await mintUsdc(defaultFund.mul(10), aliceAddress);
-//     await mintUsdc(defaultFund.mul(10), bobAddress);
+    uniRouter = await ethers.getContractAt(
+      "IUniswapV2Router",
+      ROUTER_ADDRESS[chainId]
+    );
 
-//     await usdc
-//       .connect(alice)
-//       .approve(portfolioDCA.address, ethers.constants.MaxUint256);
-//     await usdc
-//       .connect(bob)
-//       .approve(portfolioDCA.address, ethers.constants.MaxUint256);
+    await portfolioDCA
+      .connect(deployer)
+      .setAllowedTokens(
+        [usdc.address, wbtc.address],
+        ['USDC', 'wBTC'], 
+        [true, true]
+      );
 
-//     snapshotId = await ethers.provider.send("evm_snapshot", []);
-//   });
+    await mintUsdc(chainId, defaultFund.mul(10), aliceAddress);
+    await mintUsdc(chainId, defaultFund.mul(10), bobAddress);
 
-//   beforeEach(async () => {
-//     await ethers.provider.send("evm_revert", [snapshotId]);
-//     snapshotId = await ethers.provider.send("evm_snapshot", []);
-//   });
+    await usdc
+      .connect(alice)
+      .approve(portfolioDCA.address, ethers.constants.MaxUint256);
+    await usdc
+      .connect(bob)
+      .approve(portfolioDCA.address, ethers.constants.MaxUint256);
 
-//   describe("getExecutablePositions()", async () => {
-//     it("should return false if no executable positions", async () => {
-//       const [canExec, payload] = await resolver.getExecutablePositions();
-//       expect(canExec).to.be.eq(false);
+    // Impersonate ops
+    await network.provider.request({
+      method: "hardhat_impersonateAccount",
+      params: [OPS_ADDRESS[chainId]],
+    });
+  
+    ops = await ethers.getSigner(OPS_ADDRESS[chainId]);
+    opsAddress = ops.address
 
-//       const taskData = portfolioDCA.interface.encodeFunctionData("executeDCAs", [
-//         [],
-//         [],
-//       ]);
-//       expect(payload).to.be.eq(taskData);
-//     });
-//     it("should return true if there is an executable position", async () => {
-//       const positionId = await getNextPositionId(portfolioDCA);
-//       await portfolioDCA
-//         .connect(alice)
-//         .setPosition(
-//           usdc.address,
-//           weth.address,
-//           defaultFund,
-//           defaultDCA,
-//           defaultInterval,
-//           defaultSlippage
-//         );
+    // Fund ops
+    await network.provider.send("hardhat_setBalance", [
+      opsAddress,
+      parseEther('1')._hex.replace("0x0", "0x"),
+    ]);
 
-//       const [canExec, payload] = await resolver.getExecutablePositions();
-//       expect(canExec).to.be.eq(true);
+    snapshotId = await ethers.provider.send("evm_snapshot", []);
+  });
 
-//       const amounts = await uniRouter.getAmountsOut(
-//         defaultDCA,
-//         defaultSwapPath
-//       );
-//       const amountOutMin: BigNumber = amounts[1];
-//       const taskData = portfolioDCA.interface.encodeFunctionData("executeDCAs", [
-//         [positionId],
-//         [{ swapAmountOutMin: amountOutMin, swapPath: defaultSwapPath }],
-//       ]);
-//       expect(payload).to.be.eq(taskData);
-//     });
-//     it("should return true if there are executable positions", async () => {
-//       const positionId1 = await getNextPositionId(portfolioDCA);
-//       await portfolioDCA
-//         .connect(alice)
-//         .setPosition(
-//           usdc.address,
-//           weth.address,
-//           defaultFund,
-//           defaultDCA,
-//           defaultInterval,
-//           defaultSlippage
-//         );
+  beforeEach(async () => {
+    await ethers.provider.send("evm_revert", [snapshotId]);
+    snapshotId = await ethers.provider.send("evm_snapshot", []);
+  });
 
-//       const positionId2 = await getNextPositionId(portfolioDCA);
-//       await portfolioDCA
-//         .connect(bob)
-//         .setPosition(
-//           usdc.address,
-//           weth.address,
-//           defaultFund,
-//           defaultDCA.mul(2),
-//           defaultInterval,
-//           defaultSlippage
-//         );
 
-//       const [canExec, payload] = await resolver.getExecutablePositions();
-//       expect(canExec).to.be.eq(true);
+  describe.only("checkPositionExecutable()", async () => {
+    beforeEach(async () => {
+      await portfolioDCA
+        .connect(alice)
+        .setPosition(
+          defaultTreasuryFund,
+          usdc.address,
+          [{
+            token: weth.address,
+            weight: 5000,
+            route: wethSwapRoute,
+            maxSlippage: defaultSlippage
+          }, {
+            token: wbtc.address,
+            weight: 5000,
+            route: wbtcSwapRoute,
+            maxSlippage: defaultSlippage
+          }],
+          defaultFund,
+          defaultDCA,
+          defaultInterval,
+          defaultGasPrice,
+          { value: defaultTreasuryFund }
+        )
+      await portfolioDCA
+        .connect(bob)
+        .setPosition(
+          defaultTreasuryFund,
+          ETH_TOKEN_ADDRESS,
+          [{
+            token: usdc.address,
+            weight: 10000,
+            route: usdcSwapRoute,
+            maxSlippage: defaultSlippage
+          }],
+          0,
+          defaultEtherDCA,
+          defaultInterval,
+          defaultGasPrice,
+          { value: defaultTreasuryFund.add(defaultEtherFund) }
+        );
+    });
+    it("should return false if user doesnt have position", async () => {
+      await portfolioDCA.connect(alice).exitPosition()
 
-//       const amounts1 = await uniRouter.getAmountsOut(
-//         defaultDCA,
-//         defaultSwapPath
-//       );
-//       const amountOutMin1: BigNumber = amounts1[1];
-//       const amounts2 = await uniRouter.getAmountsOut(
-//         defaultDCA.mul(2),
-//         defaultSwapPath
-//       );
-//       const amountOutMin2: BigNumber = amounts2[1];
-//       const taskData = portfolioDCA.interface.encodeFunctionData("executeDCAs", [
-//         [positionId1, positionId2],
-//         [
-//           { swapAmountOutMin: amountOutMin1, swapPath: defaultSwapPath },
-//           { swapAmountOutMin: amountOutMin2, swapPath: defaultSwapPath },
-//         ],
-//       ]);
-//       expect(payload).to.be.eq(taskData);
-//     });
-//     it("should skip ineligible positions", async () => {
-//       const positionId1 = await getNextPositionId(portfolioDCA);
-//       await portfolioDCA
-//         .connect(alice)
-//         .setPosition(
-//           usdc.address,
-//           weth.address,
-//           defaultFund,
-//           defaultDCA,
-//           defaultInterval,
-//           defaultSlippage
-//         );
+      const [canExec, payload] = await resolver.checkPositionExecutable(alice.address);
+      expect(canExec).to.be.eq(false);
+      
+      expect(toUtf8String(payload)).to.be.eq("User doesnt have a position");
+    })
+    it("should return false if user position not mature", async () => {
+      await portfolioDCA.connect(ops).executeDCA(aliceAddress, [0, 0]);
 
-//       const positionId2 = await getNextPositionId(portfolioDCA);
-//       await portfolioDCA
-//         .connect(bob)
-//         .setPosition(
-//           usdc.address,
-//           weth.address,
-//           defaultFund,
-//           defaultDCA,
-//           defaultInterval,
-//           defaultSlippage
-//         );
+      const [canExec, payload] = await resolver.checkPositionExecutable(alice.address);
+      expect(canExec).to.be.eq(false);
+      
+      expect(toUtf8String(payload)).to.be.eq("DCA not mature");
+    })
+    it("should return false if gas price is too expensive", async () => {
+      const [canExec, payload] = await resolver.checkPositionExecutable(alice.address, { gasPrice: parseGwei(defaultGasPrice).mul(2) });
+      expect(canExec).to.be.eq(false);
+      
+      expect(toUtf8String(payload)).to.be.eq("Gas too expensive");
+    })
+    it("should return true if position is ready", async () => {
+      const [canExec] = await resolver.checkPositionExecutable(alice.address);
+      expect(canExec).to.be.eq(true);
+    })
+    it("should return correct swapsAmountOutMins", async () => {
+      const [canExec, payload] = await resolver.checkPositionExecutable(alice.address);
+      expect(canExec).to.be.eq(true);
 
-//       const positionId3 = await getNextPositionId(portfolioDCA);
-//       await portfolioDCA
-//         .connect(bob)
-//         .setPosition(
-//           usdc.address,
-//           weth.address,
-//           defaultFund,
-//           defaultDCA,
-//           defaultInterval,
-//           defaultSlippage
-//         );
+      const wethAmounts = await uniRouter.getAmountsOut(
+        defaultDCA.mul(5000).div(10000),
+        wethSwapRoute
+      );
+      const wbtcAmounts = await uniRouter.getAmountsOut(
+        defaultDCA.mul(5000).div(10000),
+        wbtcSwapRoute
+      );
 
-//       // empty position1, trigger interval position2
-//       await portfolioDCA.connect(alice).withdrawTokenIn(positionId1, defaultFund);
-//       await portfolioDCA.connect(deployer).executeDCA(positionId2, {
-//         swapAmountOutMin: 0,
-//         swapPath: defaultSwapPath,
-//       });
+      const wethAmountOutMin: BigNumber = wethAmounts[wethAmounts.length - 1]
+        .mul(BigNumber.from(10000).sub(defaultSlippage)).div(10000);
+      const wbtcAmountOutMin: BigNumber = wbtcAmounts[wbtcAmounts.length - 1]
+        .mul(BigNumber.from(10000).sub(defaultSlippage)).div(10000);
 
-//       const [canExec, payload] = await resolver.getExecutablePositions();
-//       expect(canExec).to.be.eq(true);
+      const taskData = portfolioDCA.interface.encodeFunctionData("executeDCA", [
+        alice.address,
+        [wethAmountOutMin, wbtcAmountOutMin],
+      ]);
 
-//       const amounts = await uniRouter.getAmountsOut(
-//         defaultDCA,
-//         defaultSwapPath
-//       );
-//       const amountOutMin: BigNumber = amounts[1];
+      expect(payload).to.be.eq(taskData);
+    })
+    it("should return correct swapsAmountOutMins ETH", async () => {
+      const [canExec, payload] = await resolver.checkPositionExecutable(bob.address);
+      expect(canExec).to.be.eq(true);
 
-//       const taskData = portfolioDCA.interface.encodeFunctionData("executeDCAs", [
-//         [positionId3],
-//         [{ swapAmountOutMin: amountOutMin, swapPath: defaultSwapPath }],
-//       ]);
-//       expect(payload).to.be.eq(taskData);
+      const usdcAmounts = await uniRouter.getAmountsOut(
+        defaultEtherDCA,
+        usdcSwapRoute
+      );
 
-//       const now = await getCurrentTimestamp();
-//       await fastForwardTo(now.add(defaultInterval).toNumber());
+      const usdcAmountOutMin: BigNumber = usdcAmounts[usdcAmounts.length - 1]
+        .mul(BigNumber.from(10000).sub(defaultSlippage)).div(10000);
 
-//       const [canExec2, payload2] = await resolver.getExecutablePositions();
-//       expect(canExec2).to.be.eq(true);
+      const taskData = portfolioDCA.interface.encodeFunctionData("executeDCA", [
+        bob.address,
+        [usdcAmountOutMin],
+      ]);
 
-//       const amounts2 = await uniRouter.getAmountsOut(
-//         defaultDCA,
-//         defaultSwapPath
-//       );
-//       const amountOutMin2: BigNumber = amounts2[1];
+      expect(payload).to.be.eq(taskData);
+    })
+    it("executeDCA should succeed with swapsAmountOutMins", async () => {
+      const [canExec, payload] = await resolver.checkPositionExecutable(alice.address);
+      expect(canExec).to.be.eq(true);
 
-//       const taskData2 = portfolioDCA.interface.encodeFunctionData("executeDCAs", [
-//         [positionId2, positionId3],
-//         [
-//           { swapAmountOutMin: amountOutMin2, swapPath: defaultSwapPath },
-//           { swapAmountOutMin: amountOutMin2, swapPath: defaultSwapPath },
-//         ],
-//       ]);
-//       expect(payload2).to.be.eq(taskData2);
-//     });
-//   });
-// });
+      const wethAmounts = await uniRouter.getAmountsOut(
+        defaultDCA.mul(5000).div(10000),
+        wethSwapRoute
+      );
+      const wbtcAmounts = await uniRouter.getAmountsOut(
+        defaultDCA.mul(5000).div(10000),
+        wbtcSwapRoute
+      );
+
+      const wethAmountOutMin: BigNumber = wethAmounts[wethAmounts.length - 1]
+        .mul(BigNumber.from(10000).sub(defaultSlippage)).div(10000);
+      const wbtcAmountOutMin: BigNumber = wbtcAmounts[wbtcAmounts.length - 1]
+        .mul(BigNumber.from(10000).sub(defaultSlippage)).div(10000);
+
+      const taskData = portfolioDCA.interface.encodeFunctionData("executeDCA", [
+        alice.address,
+        [wethAmountOutMin, wbtcAmountOutMin],
+      ]);
+
+      expect(payload).to.be.eq(taskData)
+
+      const tx = await ops.sendTransaction({
+        to: portfolioDCA.address,
+        data: taskData
+      })
+
+      expect(tx).to.emit(portfolioDCA, "ExecuteDCA").withArgs(alice.address)
+    })
+  })
+});

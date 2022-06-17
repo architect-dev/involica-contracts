@@ -24,23 +24,19 @@ contract PortfolioDCAResolver {
     {
         IPortfolioDCA.Position memory position = portfolioDCA.getPosition(_user);
 
-        if (block.timestamp < (position.lastDCA + position.intervalDCA)) return (false, bytes("Position not ready"));
+        if (position.user != _user || position.taskId == bytes32(0)) return (false, bytes("User doesnt have a position"));
+        if (block.timestamp < (position.lastDCA + position.intervalDCA)) return (false, bytes("DCA not mature"));
         if (position.maxGasPrice > 0 && tx.gasprice > position.maxGasPrice) return (false, bytes("Gas too expensive"));
         canExec = true;
 
-        address[] memory path;
         uint256[] memory amounts;
         uint256[] memory swapsAmountOutMin = new uint256[](position.tokensOut.length);
         for (uint256 i = 0; i < position.tokensOut.length; i++) {
-            path = new address[](2);
-            path[0] = position.tokenIn;
-            path[1] = position.tokensOut[i].token;
-
             amounts = uniRouter.getAmountsOut(
-                position.amountDCA,
-                path
+                position.amountDCA * position.tokensOut[i].weight / 10_000,
+                position.tokensOut[i].route
             );
-            swapsAmountOutMin[i] = amounts[1] * (10_000 - position.tokensOut[i].maxSlippage) / 10_000;
+            swapsAmountOutMin[i] = amounts[amounts.length - 1] * (10_000 - position.tokensOut[i].maxSlippage) / 10_000;
         }
 
         execPayload = abi.encodeWithSelector(

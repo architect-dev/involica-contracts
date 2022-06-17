@@ -3,7 +3,7 @@ import { ethers, network } from "hardhat";
 import { USDC_ADDRESS, USDC_OWNING_WALLET } from "../../constants";
 import { PortfolioDCA } from "../../typechain";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { parseEther } from "ethers/lib/utils";
+import { hexDataSlice, parseEther, toUtf8String } from "ethers/lib/utils";
 
 export const setAllowedTokens = async (
   portfolioDCA: PortfolioDCA,
@@ -71,3 +71,5 @@ export const impersonateAccount = async (
 };
 
 export const ONE_ETH = parseEther("1")
+
+export const parseGwei = (value: BigNumberish) => BigNumber.from(value).mul(1000000000)

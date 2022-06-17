@@ -183,7 +183,7 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
 
         position.amountDCA = _amountDCA;
         position.intervalDCA = _intervalDCA;
-        position.maxGasPrice = _maxGasPrice;
+        position.maxGasPrice = _maxGasPrice * 1 gwei;
 
         // Add tokens to position
         delete position.tokensOut;
