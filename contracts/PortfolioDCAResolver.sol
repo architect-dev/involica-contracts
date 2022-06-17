@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
-import {IPortfolioDCA} from "./interfaces/IPortfolioDCA.sol";
+import {IPortfolioDCA, IPortfolioDCAResolver} from "./interfaces/IPortfolioDCA.sol";
 import {IUniswapV2Router} from "./interfaces/IUniswapV2Router.sol";
 
-contract PortfolioDCAResolver {
+contract PortfolioDCAResolver is IPortfolioDCAResolver {
     IPortfolioDCA public portfolioDCA;
     IUniswapV2Router public uniRouter;
 

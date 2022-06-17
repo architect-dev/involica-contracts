@@ -90,3 +90,7 @@ interface IPortfolioDCA {
     function getPosition(address) external view returns (Position memory);
     function executeDCA(address, uint256[] calldata) external; 
 }
+
+interface IPortfolioDCAResolver {
+    function checkPositionExecutable(address _user) external view returns (bool canExec, bytes memory execPayload);
+}

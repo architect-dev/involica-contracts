@@ -159,7 +159,7 @@ describe("PortfolioDCAResolver", function () {
   });
 
 
-  describe.only("checkPositionExecutable()", async () => {
+  describe("checkPositionExecutable()", async () => {
     beforeEach(async () => {
       await portfolioDCA
         .connect(alice)

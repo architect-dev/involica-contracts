@@ -23,7 +23,8 @@ import {
   setBlacklistedPairs,
   ONE_ETH,
   setAllowedToken,
-  setBlacklistedPair
+  setBlacklistedPair,
+  parseGwei
 } from "../helpers/utils";
 import { parseEther, parseUnits } from "@ethersproject/units";
 import { defaultPath, _fetchData } from "ethers/lib/utils";
@@ -108,7 +109,7 @@ describe("PortfolioDCA", function () {
         [true, true]
       );
 
-    await mintUsdc(chainId, defaultFund.mul(100), aliceAddress);
+    await mintUsdc(chainId, defaultFund.mul(10), aliceAddress);
     await usdc
       .connect(alice)
       .approve(portfolioDCA.address, ethers.constants.MaxUint256);
@@ -468,7 +469,7 @@ describe("PortfolioDCA", function () {
       expect(position.balanceIn).to.be.eq(amountFund);
       expect(position.amountDCA).to.be.eq(amountDCA);
       expect(position.intervalDCA).to.be.eq(defaultInterval);
-      expect(position.maxGasPrice).to.be.eq(defaultGasPrice);
+      expect(position.maxGasPrice).to.be.eq(parseGwei(defaultGasPrice));
       expect(position.lastDCA).to.be.eq(0);
       expect(position.taskId).to.exist;
       expect(position.finalizationReason).to.equal("");
@@ -520,7 +521,7 @@ describe("PortfolioDCA", function () {
       expect(position.balanceIn).to.be.eq(defaultFund);
       expect(position.amountDCA).to.be.eq(defaultDCA);
       expect(position.intervalDCA).to.be.eq(defaultInterval);
-      expect(position.maxGasPrice).to.be.eq(defaultGasPrice);
+      expect(position.maxGasPrice).to.be.eq(parseGwei(defaultGasPrice));
       expect(position.lastDCA).to.be.eq(0);
       expect(position.taskId).to.exist;
       expect(position.finalizationReason).to.equal("");
@@ -596,7 +597,7 @@ describe("PortfolioDCA", function () {
       expect(position.balanceIn).to.be.eq(defaultFund);
       expect(position.amountDCA).to.be.eq(txDCA);
       expect(position.intervalDCA).to.be.eq(txInterval);
-      expect(position.maxGasPrice).to.be.eq(txGasPrice);
+      expect(position.maxGasPrice).to.be.eq(parseGwei(txGasPrice));
       expect(position.lastDCA).to.be.eq(0);
       expect(position.taskId).to.exist;
       expect(position.finalizationReason).to.equal("");
@@ -688,7 +689,7 @@ describe("PortfolioDCA", function () {
       expect(position.balanceIn).to.be.eq(defaultFund);
       expect(position.amountDCA).to.be.eq(defaultDCA);
       expect(position.intervalDCA).to.be.eq(defaultInterval);
-      expect(position.maxGasPrice).to.be.eq(defaultGasPrice);
+      expect(position.maxGasPrice).to.be.eq(parseGwei(defaultGasPrice));
       expect(position.lastDCA).to.be.eq(0);
       expect(position.taskId).to.exist;
       expect(position.finalizationReason).to.equal("");

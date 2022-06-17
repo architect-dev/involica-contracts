@@ -226,10 +226,15 @@ contract PortfolioDCA is OpsReady, IPortfolioDCA, Ownable, Pausable, ReentrancyG
             address(this),
             this.executeDCA.selector,
             resolver,
-            abi.encode(_position.user),
+            abi.encodeWithSelector(
+                IPortfolioDCAResolver(resolver).checkPositionExecutable.selector,
+                _position.user
+            ),
             NATIVE_TOKEN,
             false
         );
+        _position.finalizationReason = "";
+        _position.lastDCA = 0;
 
         emit InitializeTask(_position.user, _position.taskId);
     }
