@@ -2,36 +2,34 @@ import hre from "hardhat";
 import {
   OPS_ADDRESS,
   ROUTER_ADDRESS,
-  WETH_ADDRESS,
-  WETH_SYMBOL,
+  WETH_ADDRESS
 } from "../constants";
-import { PortfolioDCAResolver__factory, PortfolioDCA__factory } from "../typechain";
+import { InvolicaResolver__factory, Involica__factory } from "../typechain";
 
 async function main() {
   const [signer] = await hre.ethers.getSigners();
-  const chainId = 137;
+  const chainId = hre.network.config.chainId!;
 
   // DEPLOY PORTFOLIO DCA
-  const PortfolioDCAFactory = <PortfolioDCA__factory>(
-    await hre.ethers.getContractFactory("PortfolioDCA", signer)
+  const InvolicaFactory = <Involica__factory>(
+    await hre.ethers.getContractFactory("Involica", signer)
   );
 
-  const portfolioDCA = await PortfolioDCAFactory.deploy(
+  const involica = await InvolicaFactory.deploy(
     OPS_ADDRESS[chainId],
     ROUTER_ADDRESS[chainId],
-    WETH_ADDRESS[chainId],
-    WETH_SYMBOL[chainId]
+    WETH_ADDRESS[chainId]
   );
-  console.log("PortfolioDCA TxHash:", portfolioDCA.deployTransaction.hash);
-  await portfolioDCA.deployed();
-  console.log("PortfolioDCA deployed to:", portfolioDCA.address);
+  console.log("Involica TxHash:", involica.deployTransaction.hash);
+  await involica.deployed();
+  console.log("Involica deployed to:", involica.address);
 
   // DEPLOY RESOLVER
-  const PortfolioDCAResolverFactory = <PortfolioDCAResolver__factory>(
-    await hre.ethers.getContractFactory("PortfolioDCAResolver", signer)
+  const InvolicaResolverFactory = <InvolicaResolver__factory>(
+    await hre.ethers.getContractFactory("InvolicaResolver", signer)
   );
-  const resolver = await PortfolioDCAResolverFactory.deploy(
-    portfolioDCA.address,
+  const resolver = await InvolicaResolverFactory.deploy(
+    involica.address,
     ROUTER_ADDRESS[chainId]
   );
   console.log("Resolver TxHash:", resolver.deployTransaction.hash);
@@ -39,8 +37,8 @@ async function main() {
   console.log("Resolver deployed to:", resolver.address);
 
   // SET RESOLVER
-  await portfolioDCA.setResolver(resolver.address);
-  console.log("PortfolioDCA resolver set:", resolver.address);
+  await involica.setResolver(resolver.address);
+  console.log("Involica resolver set:", resolver.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

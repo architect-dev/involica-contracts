@@ -1,6 +1,8 @@
 node_modules
 .env
 .eslintcache
+.vscode
+.husky
 package-lock.json
 yarn.lock
 yarn-error.log
