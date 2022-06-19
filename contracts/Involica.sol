@@ -11,7 +11,6 @@ import "./interfaces/IInvolica.sol";
 import "./interfaces/IUniswapV2Router.sol";
 import "./external/IWETH.sol";
 import "./interfaces/IERC20Ext.sol";
-import "hardhat/console.sol";
 
 /*
 
@@ -203,10 +202,24 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         position.tokenIn = tokenIn;
 
         position.balanceIn += amountIn;
-        require(
-            position.fromWallet || position.balanceIn >= _amountDCA,
-            "Deposit for at least 1 DCA"
-        );
+
+        // Validate balance / approval + wallet balance can cover at least 1 DCA
+        if (_fromWallet) {
+            require(
+                IERC20(tokenIn).allowance(msg.sender, address(this)) >=
+                    _amountDCA,
+                "Approve for at least 1 DCA"
+            );
+            require(
+                IERC20(tokenIn).balanceOf(msg.sender) >= _amountDCA,
+                "Wallet balance for at least 1 DCA"
+            );
+        } else {
+            require(
+                position.balanceIn >= _amountDCA,
+                "Deposit for at least 1 DCA"
+            );
+        }
 
         position.amountDCA = _amountDCA;
         position.intervalDCA = _intervalDCA;
@@ -256,6 +269,30 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         _checkAndInitializeTask(positions[msg.sender]);
     }
 
+    function reInitFromWalletPosition()
+        public
+        whenNotPaused
+        positionExists
+        nonReentrant
+    {
+        Position storage position = positions[msg.sender];
+
+        require(position.taskId == bytes32(0), "Task already initialized");
+        require(position.fromWallet, "Must be fromWallet position");
+        require(
+            IERC20(position.tokenIn).allowance(msg.sender, address(this)) >=
+                position.amountDCA,
+            "Approve for at least 1 DCA"
+        );
+        require(
+            IERC20(position.tokenIn).balanceOf(msg.sender) >=
+                position.amountDCA,
+            "Wallet balance for at least 1 DCA"
+        );
+
+        _checkAndInitializeTask(position);
+    }
+
     function depositIn(uint256 _amountIn)
         public
         payable
@@ -264,12 +301,13 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         notFromWalletPosition
         nonReentrant
     {
+        Position storage position = positions[msg.sender];
         uint256 amountIn;
-        if (positions[msg.sender].tokenIn == weth && msg.value > 0) {
+        if (position.tokenIn == weth && msg.value > 0) {
             IWETH(weth).deposit{value: msg.value}();
             amountIn = msg.value;
         } else {
-            IERC20(positions[msg.sender].tokenIn).safeTransferFrom(
+            IERC20(position.tokenIn).safeTransferFrom(
                 msg.sender,
                 address(this),
                 _amountIn
@@ -279,11 +317,11 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
         require(amountIn > 0, "_amount must be > 0");
 
-        positions[msg.sender].balanceIn += amountIn;
+        position.balanceIn += amountIn;
 
-        emit Deposit(msg.sender, positions[msg.sender].tokenIn, amountIn);
+        emit Deposit(msg.sender, position.tokenIn, amountIn);
 
-        _checkAndInitializeTask(positions[msg.sender]);
+        _checkAndInitializeTask(position);
     }
 
     function withdrawIn(uint256 _amount)
@@ -292,11 +330,14 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         notFromWalletPosition
         nonReentrant
     {
-        require(_amount > 0, "_amount must be > 0");
-        require(positions[msg.sender].balanceIn >= _amount, "Bad withdraw");
-        _withdrawIn(positions[msg.sender], _amount);
+        Position storage position = positions[msg.sender];
 
-        _checkAndFinalizeTask(positions[msg.sender], 0);
+        require(_amount > 0, "_amount must be > 0");
+        require(position.balanceIn >= _amount, "Bad withdraw");
+
+        _withdrawIn(position, _amount);
+
+        _checkAndFinalizeTask(position, 0);
     }
 
     function _withdrawIn(Position storage _position, uint256 _amount) internal {
@@ -400,7 +441,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             ) {
                 _finalizeTask(
                     _position,
-                    "Funds to pull from wallet not approved"
+                    "Insufficient approval to pull from wallet"
                 );
                 return true;
             }
@@ -424,7 +465,10 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             }
         }
 
-        if (userTreasuries[_position.user] == 0 || userTreasuries[_position.user] < _txFee) {
+        if (
+            userTreasuries[_position.user] == 0 ||
+            userTreasuries[_position.user] < _txFee
+        ) {
             if (_txFee > 0) {
                 // Tx has fee, but isn't covered by user's treasury, empty to zero
                 userTreasuries[_position.user] = 0;
@@ -499,7 +543,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         if (!position.fromWallet) return;
 
         IERC20(position.tokenIn).safeTransferFrom(
-            msg.sender,
+            position.user,
             address(this),
             position.amountDCA
         );
