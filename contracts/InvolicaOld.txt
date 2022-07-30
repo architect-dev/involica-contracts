@@ -11,7 +11,6 @@ import "./interfaces/IInvolica.sol";
 import "./interfaces/IUniswapV2Router.sol";
 import "./external/IWETH.sol";
 import "./interfaces/IERC20Ext.sol";
-import "hardhat/console.sol";
 
 /*
 
@@ -52,8 +51,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     address public resolver;
 
     IUniswapV2Router public immutable uniRouter;
-    address public constant NATIVE_TOKEN =
-        0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address public constant NATIVE_TOKEN = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public immutable weth;
 
     receive() external payable {}
@@ -66,6 +64,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         uniRouter = IUniswapV2Router(_uniRouter);
         weth = _weth;
 
+        _setAllowedToken(NATIVE_TOKEN, true);
         _setAllowedToken(_weth, true);
     }
 
@@ -75,6 +74,14 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         require(
             positions[msg.sender].user == msg.sender,
             "User doesnt have a position"
+        );
+        _;
+    }
+
+    modifier notFromWalletPosition() {
+        require(
+            !positions[msg.sender].fromWallet,
+            "Must not be a fromWallet position"
         );
         _;
     }
@@ -141,8 +148,10 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     // POSITION MANAGEMENT
 
     function setPosition(
+        bool _fromWallet,
         address _tokenIn,
         TokenOutParams[] memory _outs,
+        uint256 _amountIn,
         uint256 _amountDCA,
         uint256 _intervalDCA,
         uint256 _maxGasPrice
@@ -155,21 +164,61 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         Position storage position = positions[msg.sender];
 
         // Handle deposit
-        require(allowedTokens.contains(_tokenIn), "Token is not allowed");
+        uint256 amountIn = 0;
+        address tokenIn = _tokenIn;
+        if (_tokenIn == NATIVE_TOKEN) {
+            require(
+                !_fromWallet,
+                "Cannot use the Native Token for a fromWallet position"
+            );
+            tokenIn = weth;
+            IWETH(weth).deposit{value: msg.value}();
+            amountIn = msg.value;
+        } else if (!_fromWallet) {
+            require(msg.value == 0, "Not native token deposit");
+            IERC20(_tokenIn).safeTransferFrom(
+                msg.sender,
+                address(this),
+                _amountIn
+            );
+            amountIn = _amountIn;
+        }
+        require(allowedTokens.contains(tokenIn), "Token is not allowed");
+
+        // Clean up previous position if it exists and wasn't a fromWallet position
+        if (position.user == msg.sender && !position.fromWallet) {
+            // Remove previous tokenIn if differs
+            if (tokenIn != position.tokenIn && position.balanceIn > 0) {
+                _withdrawIn(position, position.balanceIn);
+            }
+
+            _withdrawOuts(position);
+        }
 
         // Set Data
         position.user = msg.sender;
-        position.tokenIn = _tokenIn;
+        position.fromWallet = _fromWallet;
+        position.tokenIn = tokenIn;
+
+        position.balanceIn += amountIn;
 
         // Validate balance / approval + wallet balance can cover at least 1 DCA
-        require(
-            IERC20(_tokenIn).allowance(msg.sender, address(this)) >= _amountDCA,
-            "Approve for at least 1 DCA"
-        );
-        require(
-            IERC20(_tokenIn).balanceOf(msg.sender) >= _amountDCA,
-            "Wallet balance for at least 1 DCA"
-        );
+        if (_fromWallet) {
+            require(
+                IERC20(tokenIn).allowance(msg.sender, address(this)) >=
+                    _amountDCA,
+                "Approve for at least 1 DCA"
+            );
+            require(
+                IERC20(tokenIn).balanceOf(msg.sender) >= _amountDCA,
+                "Wallet balance for at least 1 DCA"
+            );
+        } else {
+            require(
+                position.balanceIn >= _amountDCA,
+                "Deposit for at least 1 DCA"
+            );
+        }
 
         position.amountDCA = _amountDCA;
         position.intervalDCA = _intervalDCA;
@@ -181,13 +230,14 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         address out;
         for (uint256 i = 0; i < _outs.length; i++) {
             out = _outs[i].token;
-            require(out != _tokenIn, "Same token both sides of pair");
+            if (out == NATIVE_TOKEN) out = weth;
+            require(out != tokenIn, "Same token both sides of pair");
             require(allowedTokens.contains(out), "Token is not allowed");
-            require(!blacklistedPairs[_tokenIn][out], "Pair is blacklisted");
+            require(!blacklistedPairs[tokenIn][out], "Pair is blacklisted");
             require(_outs[i].maxSlippage >= minSlippage, "Invalid slippage");
             require(_outs[i].weight > 0, "Non zero weight");
             require(
-                _validRoute(_tokenIn, position.amountDCA, out, _outs[i]),
+                _validRoute(tokenIn, position.amountDCA, out, _outs[i]),
                 "Invalid route"
             );
             weightsSum += _outs[i].weight;
@@ -205,21 +255,29 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
         emit SetPosition(
             msg.sender,
-            _tokenIn,
+            _fromWallet,
+            tokenIn,
             position.outs,
             _amountDCA,
             _intervalDCA,
             _maxGasPrice
         );
+        if (amountIn > 0) emit Deposit(msg.sender, tokenIn, amountIn);
 
         // New position needs to be initialized (must call from array of positions to persist taskId)
         _checkAndInitializeTask(positions[msg.sender]);
     }
 
-    function reInitPosition() public whenNotPaused positionExists nonReentrant {
+    function reInitFromWalletPosition()
+        public
+        whenNotPaused
+        positionExists
+        nonReentrant
+    {
         Position storage position = positions[msg.sender];
 
         require(position.taskId == bytes32(0), "Task already initialized");
+        require(position.fromWallet, "Must be fromWallet position");
         require(
             IERC20(position.tokenIn).allowance(msg.sender, address(this)) >=
                 position.amountDCA,
@@ -234,8 +292,99 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         _checkAndInitializeTask(position);
     }
 
+    function depositIn(uint256 _amountIn)
+        public
+        payable
+        whenNotPaused
+        positionExists
+        notFromWalletPosition
+        nonReentrant
+    {
+        Position storage position = positions[msg.sender];
+        uint256 amountIn;
+        if (position.tokenIn == weth && msg.value > 0) {
+            IWETH(weth).deposit{value: msg.value}();
+            amountIn = msg.value;
+        } else {
+            IERC20(position.tokenIn).safeTransferFrom(
+                msg.sender,
+                address(this),
+                _amountIn
+            );
+            amountIn = _amountIn;
+        }
+
+        require(amountIn > 0, "_amount must be > 0");
+
+        position.balanceIn += amountIn;
+
+        emit Deposit(msg.sender, position.tokenIn, amountIn);
+
+        _checkAndInitializeTask(position);
+    }
+
+    function withdrawIn(uint256 _amount)
+        public
+        positionExists
+        notFromWalletPosition
+        nonReentrant
+    {
+        Position storage position = positions[msg.sender];
+
+        require(_amount > 0, "_amount must be > 0");
+        require(position.balanceIn >= _amount, "Bad withdraw");
+
+        _withdrawIn(position, _amount);
+
+        _checkAndFinalizeTask(position, 0);
+    }
+
+    function _withdrawIn(Position storage _position, uint256 _amount) internal {
+        _position.balanceIn -= _amount;
+        _transferTo(payable(_position.user), _position.tokenIn, _amount);
+        emit WithdrawIn(_position.user, _position.tokenIn, _amount);
+    }
+
+    function withdrawOuts()
+        public
+        positionExists
+        notFromWalletPosition
+        nonReentrant
+    {
+        _withdrawOuts(positions[msg.sender]);
+    }
+
+    function _withdrawOuts(Position storage _position) internal {
+        address[] memory tokens = new address[](_position.outs.length);
+        uint256[] memory amounts = new uint256[](_position.outs.length);
+        for (uint256 i = 0; i < _position.outs.length; i++) {
+            tokens[i] = _position.outs[i].token;
+            amounts[i] = _position.outs[i].balance;
+            if (_position.outs[i].balance > 0) {
+                _transferTo(
+                    payable(_position.user),
+                    _position.outs[i].token,
+                    _position.outs[i].balance
+                );
+                _position.outs[i].balance = 0;
+            }
+        }
+        emit WithdrawOuts(_position.user, tokens, amounts);
+    }
+
     function exitPosition() public positionExists nonReentrant {
         Position storage position = positions[msg.sender];
+
+        // Withdraw tokens if not a fromWallet position
+        if (!position.fromWallet) {
+            // Remove in token
+            if (position.balanceIn > 0) {
+                _withdrawIn(position, position.balanceIn);
+            }
+
+            // Remove out tokens
+            _withdrawOuts(position);
+        }
 
         // Remove treasury
         _withdrawTreasury(userTreasuries[msg.sender]);
@@ -254,6 +403,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     function _checkAndInitializeTask(Position storage _position) internal {
         if (_position.user == address(0)) return;
+        if (!_position.fromWallet && _position.balanceIn < _position.amountDCA)
+            return;
         if (_position.taskId != bytes32(0)) return;
         if (userTreasuries[_position.user] == 0) return;
 
@@ -281,25 +432,38 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         internal
         returns (bool finalize)
     {
-        // Funds must be approved for this contract
-        if (
-            IERC20(_position.tokenIn).allowance(_position.user, address(this)) <
-            _position.amountDCA
-        ) {
-            _finalizeTask(
-                _position,
-                "Insufficient approval to pull from wallet"
-            );
-            return true;
-        }
+        if (_position.fromWallet) {
+            // Funds must be approved for this contract
+            if (
+                IERC20(_position.tokenIn).allowance(
+                    _position.user,
+                    address(this)
+                ) < _position.amountDCA
+            ) {
+                _finalizeTask(
+                    _position,
+                    "Insufficient approval to pull from wallet"
+                );
+                return true;
+            }
 
-        // Must be enough funds for DCA
-        if (
-            IERC20(_position.tokenIn).balanceOf(_position.user) <
-            _position.amountDCA
-        ) {
-            _finalizeTask(_position, "Insufficient funds to pull from wallet");
-            return true;
+            // Must be enough funds for DCA
+            if (
+                IERC20(_position.tokenIn).balanceOf(_position.user) <
+                _position.amountDCA
+            ) {
+                _finalizeTask(
+                    _position,
+                    "Insufficient funds to pull from wallet"
+                );
+                return true;
+            }
+        } else {
+            // Funds already in contract
+            if (_position.balanceIn < _position.amountDCA) {
+                _finalizeTask(_position, "Insufficient funds");
+                return true;
+            }
         }
 
         if (
@@ -364,17 +528,21 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         // Take transaction fee out of users treasury
         userTreasuries[_user] -= fee;
 
-        // Withdraw funds from user wallet for DCA
-        _setupDCA(position);
+        // Withdraw funds from user wallet for DCA (if fromWallet position)
+        _setupFromWalletExecution(position);
 
         // Perform swaps
         _executeDCASwaps(position, swapsAmountOutMin);
 
-        // Send unused in and all swapped outs back to users wallet
-        _finalizeDCA(position);
+        // Send unused in and all swapped outs back to users wallet (if fromWallet position)
+        _cleanupFromWalletExecution(position);
+
+        emit ExecuteDCA(_user);
     }
 
-    function _setupDCA(Position storage position) internal {
+    function _setupFromWalletExecution(Position storage position) internal {
+        if (!position.fromWallet) return;
+
         IERC20(position.tokenIn).safeTransferFrom(
             position.user,
             address(this),
@@ -460,26 +628,14 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         }
     }
 
-    function _finalizeDCA(Position storage position) internal {
-        uint256 inAmount = position.amountDCA;
+    function _cleanupFromWalletExecution(Position storage position) internal {
+        if (!position.fromWallet) return;
+
         if (position.balanceIn > 0) {
-            IERC20(position.tokenIn).safeTransfer(position.user, position.balanceIn);
-            inAmount -= position.balanceIn;
-            position.balanceIn = 0;
+            _withdrawIn(position, position.balanceIn);
         }
 
-        address[] memory tokens = new address[](position.outs.length);
-        uint256[] memory amounts = new uint256[](position.outs.length);
-        for (uint256 i = 0; i < position.outs.length; i++) {
-            tokens[i] = position.outs[i].token;
-            amounts[i] = position.outs[i].balance;
-            if (position.outs[i].balance > 0) {
-                IERC20(position.outs[i].token).safeTransfer(position.user, position.outs[i].balance);
-                position.outs[i].balance = 0;
-            }
-        }
-
-        emit FinalizeDCA(position.user, position.tokenIn, inAmount, tokens, amounts);
+        _withdrawOuts(position);
     }
 
     // HELPERS
@@ -518,6 +674,13 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         address _token,
         uint256 _amount
     ) internal {
+        if (_token == weth) {
+            IWETH(weth).withdraw(_amount);
+            (bool success, ) = _to.call{value: _amount}("");
+            require(success, "ETH transfer failed");
+        } else {
+            IERC20(_token).safeTransfer(_to, _amount);
+        }
     }
 
     // FRONTEND FETCH HELPERS
@@ -537,9 +700,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             bool userHasPosition,
             uint256 userTreasury,
             Position memory position,
-            uint256 allowance,
-            uint256 balance,
-            uint256 dcasRemaining,
+            FromWalletData memory fromWalletData,
             UserTx[] memory txs,
             UserTokenData[] memory tokens
         )
@@ -550,19 +711,33 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
         position = positions[_user];
 
-        // Fetch wallet allowance and balance
-        allowance = IERC20(position.tokenIn).allowance(
-            position.user,
-            address(this)
-        );
-        balance = IERC20(position.tokenIn).balanceOf(position.user);
-        uint256 limitedValue = allowance < balance ? allowance : balance;
-        dcasRemaining = limitedValue / position.amountDCA;
+        if (position.fromWallet) {
+            uint256 allowance = IERC20(position.tokenIn).allowance(
+                position.user,
+                address(this)
+            );
+            uint256 balance = IERC20(position.tokenIn).balanceOf(position.user);
+            uint256 limitedValue = allowance < balance ? allowance : balance;
+            fromWalletData = FromWalletData({
+                allowance: allowance,
+                balance: balance,
+                dcasRemaining: limitedValue / position.amountDCA
+            });
+        }
 
         txs = userTxs[_user];
 
         tokens = new UserTokenData[](allowedTokens.length());
         for (uint256 i = 0; i < allowedTokens.length(); i++) {
+            if (allowedTokens.at(i) == NATIVE_TOKEN) {
+                tokens[i] = UserTokenData({
+                    token: allowedTokens.at(i),
+                    allowance: type(uint256).max,
+                    balance: _user.balance
+                });
+                continue;
+            }
+
             tokens[i] = UserTokenData({
                 token: allowedTokens.at(i),
                 allowance: IERC20(allowedTokens.at(i)).allowance(

@@ -6,7 +6,6 @@ interface IInvolica {
 
     struct Position {
         address user;
-        bool fromWallet;
         address tokenIn;
         uint256 balanceIn;
         PositionOut[] outs;
@@ -34,11 +33,6 @@ interface IInvolica {
     }
 
     // Output Structure
-    struct FromWalletData {
-        uint256 allowance;
-        uint256 balance;
-        uint256 dcasRemaining;
-    }
     struct UserTokenData {
         address token;
         uint256 allowance;
@@ -59,7 +53,6 @@ interface IInvolica {
     // Events
     event SetPosition(
         address indexed owner,
-        bool indexed fromWallet,
         address tokenIn,
         PositionOut[] outs,
         uint256 amountDCA,
@@ -73,30 +66,14 @@ interface IInvolica {
         uint256 maxSlippage,
         uint256 maxGasPrice
     );
-
-    event Deposit(
-        address indexed user,
-        address indexed tokenIn,
-        uint256 indexed amount
-    );
-    event WithdrawIn(
-        address indexed user,
-        address indexed tokenIn,
-        uint256 indexed amount
-    );
-    event WithdrawOuts(
-        address indexed user,
-        address[] indexed tokens,
-        uint256[] indexed amounts
-    );
-
+    event ExitPosition(address indexed user);
     event DepositTreasury(address indexed user, uint256 indexed amount);
     event WithdrawTreasury(address indexed user, uint256 indexed amount);
 
     event InitializeTask(address indexed user, bytes32 taskId);
     event FinalizeTask(address indexed user, string reason);
 
-    event ExecuteDCA(address indexed user);
+    event FinalizeDCA(address indexed user, address indexed tokenIn, uint256 indexed inAmount, address[] outTokens, uint256[] outAmounts);
 
     // Eco Events
     event SetAllowedToken(address indexed token, bool indexed allowed);

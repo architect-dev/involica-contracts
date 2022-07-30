@@ -15,3 +15,19 @@ interface IUniswapV2Router {
         view
         returns (uint256[] memory amounts);
 }
+
+interface IUniswapV2Pair {
+    function factory() external view returns (address);
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function totalSupply() external view returns (uint256);
+    function decimals() external view returns (uint8);
+    function getReserves()
+        external
+        view
+        returns (
+            uint112,
+            uint112,
+            uint32
+        );
+}
