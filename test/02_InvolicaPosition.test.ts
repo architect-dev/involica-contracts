@@ -265,7 +265,7 @@ describe('Involica Position', function () {
         ),
       ).to.be.revertedWith('DCA amount must be > 0')
     })
-    it('should revert if route is invalid', async function () {
+    it('should revert if route has duplicates', async function () {
       await expect(
         involica.connect(alice).setPosition(
           usdc.address,
@@ -282,6 +282,78 @@ describe('Involica Position', function () {
           defaultGasPrice,
         ),
       ).to.be.revertedWith('Invalid route')
+    })
+    it('should revert if route does not match input and output tokens', async function () {
+      await expect(
+        involica.connect(alice).setPosition(
+          usdc.address,
+          [
+            {
+              token: weth.address,
+              weight: 10000,
+              route: [usdc.address, usdc.address],
+              maxSlippage: defaultSlippage,
+            },
+          ],
+          defaultDCA,
+          defaultInterval,
+          defaultGasPrice,
+        ),
+      ).to.be.revertedWith('Invalid route')
+    })
+    it('should revert if maxSlippage is less than minSlippage', async function () {
+      await expect(
+        involica.connect(alice).setPosition(
+          usdc.address,
+          [
+            {
+              token: weth.address,
+              weight: 10000,
+              route: wethSwapRoute,
+              maxSlippage: 0,
+            },
+          ],
+          defaultDCA,
+          defaultInterval,
+          defaultGasPrice,
+        ),
+      ).to.be.revertedWith('Invalid slippage')
+    })
+    it('should revert if output token is invalid', async function () {
+      await expect(
+        involica.connect(alice).setPosition(
+          usdc.address,
+          [
+            {
+              token: ETH_TOKEN_ADDRESS,
+              weight: 10000,
+              route: [usdc.address, ETH_TOKEN_ADDRESS],
+              maxSlippage: defaultSlippage,
+            },
+          ],
+          defaultDCA,
+          defaultInterval,
+          defaultGasPrice,
+        ),
+      ).to.be.revertedWith('Token is not allowed')
+    })
+    it('should revert if reInitPosition is called and task already exists', async function () {
+      await involica.connect(alice).setPosition(
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            route: wethSwapRoute,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+      )
+
+      await expect(involica.connect(alice).reInitPosition()).to.be.revertedWith('Task already initialized')
     })
     it('should revert if interval is less than one minute', async () => {
       await expect(

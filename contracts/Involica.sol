@@ -190,6 +190,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         Position storage position = positions[msg.sender];
 
         require(position.taskId == bytes32(0), 'Task already initialized');
+        require(userTreasuries[position.user] > 0, 'Treasury must not be 0');
         require(
             IERC20(position.tokenIn).allowance(msg.sender, address(this)) >= position.amountDCA,
             'Approve for at least 1 DCA'
@@ -223,7 +224,6 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     function _checkAndInitializeTask(Position storage _position) internal {
         if (_position.user == address(0)) return;
         if (_position.taskId != bytes32(0)) return;
-        if (userTreasuries[_position.user] == 0) return;
 
         _position.taskId = IOps(ops).createTimedTask(
             0,
@@ -244,13 +244,18 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     function _checkAndFinalizeTask(Position storage _position, uint256 _txFee) internal returns (bool finalize) {
         // Funds must be approved for this contract
-        if (_position.tokenIn != address(0) && IERC20(_position.tokenIn).allowance(_position.user, address(this)) < _position.amountDCA) {
+        if (
+            _position.tokenIn != address(0) &&
+            IERC20(_position.tokenIn).allowance(_position.user, address(this)) < _position.amountDCA
+        ) {
             _finalizeTask(_position, 'Insufficient approval to pull from wallet');
             return true;
         }
 
         // Must be enough funds for DCA
-        if (_position.tokenIn != address(0) && IERC20(_position.tokenIn).balanceOf(_position.user) < _position.amountDCA) {
+        if (
+            _position.tokenIn != address(0) && IERC20(_position.tokenIn).balanceOf(_position.user) < _position.amountDCA
+        ) {
             _finalizeTask(_position, 'Insufficient funds to pull from wallet');
             return true;
         }
@@ -465,7 +470,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             allowance = IERC20(position.tokenIn).allowance(position.user, address(this));
             balance = IERC20(position.tokenIn).balanceOf(position.user);
             uint256 limitedValue = allowance < balance ? allowance : balance;
-            dcasRemaining = position.amountDCA > 0 ?  limitedValue / position.amountDCA : 0;
+            dcasRemaining = position.amountDCA > 0 ? limitedValue / position.amountDCA : 0;
         }
 
         txs = userTxs[_user];
@@ -489,6 +494,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     function setResolver(address _resolver) public onlyOwner {
         require(_resolver != address(0), 'Missing resolver');
         resolver = _resolver;
+
+        emit SetResolver(_resolver);
     }
 
     function setPaused(bool _setPause) public onlyOwner {

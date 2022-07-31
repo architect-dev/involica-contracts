@@ -75,6 +75,7 @@ interface IInvolica {
     event FinalizeDCA(address indexed user, address indexed tokenIn, uint256 indexed inAmount, address[] outTokens, uint256[] outAmounts);
 
     // Eco Events
+    event SetResolver(address indexed resolver);
     event SetAllowedToken(address indexed token, bool indexed allowed);
     event SetBlacklistedPair(
         address indexed tokenA,

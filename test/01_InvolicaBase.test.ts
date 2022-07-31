@@ -125,11 +125,14 @@ describe('Involica Base', function () {
     })
   })
 
-  describe('setAllowedPairs()', async () => {
+  describe('setAllowedTokens()', async () => {
     it('should revert if sender is not owner', async () => {
       await expect(involica.connect(alice).setAllowedTokens([usdc.address], [false])).to.be.revertedWith(
         'Ownable: caller is not the owner',
       )
+    })
+    it('should revert if argument array lengths dont match', async () => {
+      await expect(involica.connect(deployer).setAllowedTokens([usdc.address], [])).to.be.revertedWith('Invalid length')
     })
     it('should set new value', async () => {
       expect((await involica.fetchAllowedTokens()).indexOf(usdc.address) > -1).to.be.eq(true)
@@ -141,6 +144,29 @@ describe('Involica Base', function () {
 
       expect((await involica.fetchAllowedTokens()).indexOf(usdc.address) > -1).to.be.eq(false)
       expect((await involica.fetchAllowedTokens()).indexOf(wbtc.address) > -1).to.be.eq(false)
+    })
+  })
+
+  describe('setBlacklistedPairs()', async () => {
+    it('should revert if sender is not owner', async () => {
+      await expect(
+        involica.connect(alice).setBlacklistedPairs([usdc.address, weth.address], [true]),
+      ).to.be.revertedWith('Ownable: caller is not the owner')
+    })
+    it('should revert if argument array lengths dont match', async () => {
+      await expect(involica.connect(deployer).setBlacklistedPairs([usdc.address], [true])).to.be.revertedWith(
+        'Invalid length',
+      )
+    })
+    it('should set new value', async () => {
+      const blacklistedInit = await involica.blacklistedPairs(usdc.address, weth.address)
+      expect(blacklistedInit).to.be.false
+
+      const tx = await involica.connect(deployer).setBlacklistedPairs([usdc.address, weth.address], [true])
+      expect(tx).to.emit(involica, 'SetBlacklistedPair').withArgs(usdc.address, weth.address, true)
+
+      const blacklistedFinal = await involica.blacklistedPairs(usdc.address, weth.address)
+      expect(blacklistedFinal).to.be.true
     })
   })
 
@@ -173,6 +199,25 @@ describe('Involica Base', function () {
       expect(await involica.paused()).to.be.eq(true)
       await expect(involica.connect(deployer).setPaused(false)).to.emit(involica, 'Unpaused').withArgs(deployer.address)
       expect(await involica.paused()).to.be.eq(false)
+    })
+  })
+
+  describe('setResolver()', async () => {
+    it('should revert if sender is not owner', async () => {
+      await expect(involica.connect(alice).setResolver(alice.address)).to.be.revertedWith(
+        'Ownable: caller is not the owner',
+      )
+    })
+    it('should revert if invalid resolver set', async () => {
+      await expect(involica.connect(deployer).setResolver(ethers.constants.AddressZero)).to.be.revertedWith(
+        'Missing resolver',
+      )
+    })
+    it('should set new value', async () => {
+      await expect(involica.connect(deployer).setResolver(deployer.address))
+        .to.emit(involica, 'SetResolver')
+        .withArgs(deployer.address)
+      expect(await involica.resolver()).to.be.eq(deployer.address)
     })
   })
 })
