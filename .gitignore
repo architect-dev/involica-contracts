@@ -12,5 +12,4 @@ coverage.json
 cache
 artifacts
 typechain
-coverage
 bin/
