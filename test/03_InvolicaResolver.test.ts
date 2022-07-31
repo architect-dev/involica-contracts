@@ -4,15 +4,7 @@ import { Involica, InvolicaResolver, InvolicaResolver__factory, Involica__factor
 import chai from 'chai'
 import { solidity } from 'ethereum-waffle'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
-import {
-  ETH_TOKEN_ADDRESS,
-  OPS_ADDRESS,
-  ROUTER_ADDRESS,
-  USDC_ADDRESS,
-  USDC_DECIMALS,
-  WBTC_ADDRESS,
-  WETH_ADDRESS,
-} from '../constants'
+import { OPS_ADDRESS, ROUTER_ADDRESS, USDC_ADDRESS, USDC_DECIMALS, WBTC_ADDRESS, WETH_ADDRESS } from '../constants'
 import { BigNumber, BigNumberish } from '@ethersproject/bignumber'
 import { mintUsdc, parseGwei } from './utils'
 import { parseUnits } from '@ethersproject/units'
@@ -39,13 +31,10 @@ describe('Involica Resolver', function () {
 
   let defaultTreasuryFund: BigNumber
   let defaultFund: BigNumber
-  let defaultEtherFund: BigNumber
   let defaultDCA: BigNumber
-  let defaultEtherDCA: BigNumber
   let defaultInterval: BigNumberish
   let defaultGasPrice: BigNumberish
   let defaultSlippage: BigNumber
-  let usdcSwapRoute: string[]
   let wethSwapRoute: string[]
   let wbtcSwapRoute: string[]
 
@@ -61,11 +50,8 @@ describe('Involica Resolver', function () {
 
     defaultTreasuryFund = parseEther('0.5')
     defaultFund = parseUnits('10000', USDC_DECIMALS)
-    defaultEtherFund = parseEther('1000')
     defaultDCA = defaultFund.div(10)
-    defaultEtherDCA = defaultEtherFund.div(10)
     defaultInterval = 60 // second;
-    usdcSwapRoute = [weth.address, usdc.address]
     wethSwapRoute = [usdc.address, weth.address]
     wbtcSwapRoute = [usdc.address, weth.address, wbtc.address]
     defaultGasPrice = 100
@@ -212,7 +198,7 @@ describe('Involica Resolver', function () {
         data: taskData,
       })
 
-      expect(tx).to.emit(involica, 'ExecuteDCA').withArgs(alice.address)
+      expect(tx).to.emit(involica, 'FinalizeDCA')
     })
   })
 })

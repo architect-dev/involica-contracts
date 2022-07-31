@@ -216,7 +216,7 @@ describe('Integration Test: Gelato DCA', function () {
       await usdc.connect(alice).approve(involica.address, 0)
 
       // Finalize task with no approval
-      const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)
+      const payload = (await resolver.checkPositionExecutable(alice.address))[1]
       await opsContract
         .connect(gelato)
         .exec(
@@ -331,7 +331,7 @@ describe('Integration Test: Gelato DCA', function () {
       await usdc.connect(alice).transfer(bob.address, aliceUsdcInit)
 
       // Finalize task with no wallet balance
-      const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)
+      const payload = (await resolver.checkPositionExecutable(alice.address))[1]
       await opsContract
         .connect(gelato)
         .exec(
@@ -447,7 +447,7 @@ describe('Integration Test: Gelato DCA', function () {
       const position2 = (await involica.fetchUserData(alice.address)).position
       expect(position2.finalizationReason).to.be.eq('')
 
-      const [canExec2, payload2] = await resolver.checkPositionExecutable(alice.address)
+      const payload2 = (await resolver.checkPositionExecutable(alice.address))[1]
       const execTx2 = await opsContract
         .connect(gelato)
         .exec(
@@ -461,7 +461,7 @@ describe('Integration Test: Gelato DCA', function () {
           payload2,
         )
 
-      expect(execTx2).to.emit(involica, 'ExecuteDCA').withArgs(alice.address)
+      expect(execTx2).to.emit(involica, 'FinalizeDCA')
     })
   })
 })

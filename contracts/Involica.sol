@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./external/OpsReady.sol";
-import "./interfaces/IInvolica.sol";
-import "./interfaces/IUniswapV2Router.sol";
-import "./external/IWETH.sol";
-import "./interfaces/IERC20Ext.sol";
-import "hardhat/console.sol";
+import '@openzeppelin/contracts/access/Ownable.sol';
+import '@openzeppelin/contracts/security/Pausable.sol';
+import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
+import '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
+import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import './external/OpsReady.sol';
+import './interfaces/IInvolica.sol';
+import './interfaces/IUniswapV2Router.sol';
+import './external/IWETH.sol';
+import './interfaces/IERC20Ext.sol';
+import 'hardhat/console.sol';
 
 /*
 
@@ -52,9 +52,10 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     address public resolver;
 
     IUniswapV2Router public immutable uniRouter;
-    address public constant NATIVE_TOKEN =
-        0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address public constant NATIVE_TOKEN = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public immutable weth;
+
+    uint256 activeTxBalanceIn = 0;
 
     receive() external payable {}
 
@@ -72,18 +73,11 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     // VALIDATORS
 
     modifier positionExists() {
-        require(
-            positions[msg.sender].user == msg.sender,
-            "User doesnt have a position"
-        );
+        require(positions[msg.sender].user == msg.sender, 'User doesnt have a position');
         _;
     }
 
-    function _validPair(address _in, address _out)
-        internal
-        view
-        returns (bool)
-    {
+    function _validPair(address _in, address _out) internal view returns (bool) {
         return (allowedTokens.contains(_in) &&
             allowedTokens.contains(_out) &&
             _in != _out &&
@@ -96,16 +90,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         address _out,
         TokenOutParams memory _tokenOut
     ) internal view returns (bool) {
-        if (
-            _tokenIn != _tokenOut.route[0] ||
-            _out != _tokenOut.route[_tokenOut.route.length - 1]
-        ) return false;
-        try
-            uniRouter.getAmountsOut(
-                (_amountIn * _tokenOut.weight) / 10_000,
-                _tokenOut.route
-            )
-        {
+        if (_tokenIn != _tokenOut.route[0] || _out != _tokenOut.route[_tokenOut.route.length - 1]) return false;
+        try uniRouter.getAmountsOut((_amountIn * _tokenOut.weight) / 10_000, _tokenOut.route) {
             return true;
         } catch {
             return false;
@@ -115,7 +101,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     // TREASURY MANAGEMENT
 
     function depositTreasury() public payable whenNotPaused nonReentrant {
-        require(msg.value > 0, "msg.value must be > 0");
+        require(msg.value > 0, 'msg.value must be > 0');
         userTreasuries[msg.sender] += msg.value;
 
         emit DepositTreasury(msg.sender, msg.value);
@@ -124,16 +110,16 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     }
 
     function withdrawTreasury(uint256 _amount) public nonReentrant {
-        require(_amount > 0, "_amount must be > 0");
-        require(_amount <= userTreasuries[msg.sender], "Bad withdraw");
+        require(_amount > 0, '_amount must be > 0');
+        require(_amount <= userTreasuries[msg.sender], 'Bad withdraw');
         _withdrawTreasury(_amount);
 
         _checkAndFinalizeTask(positions[msg.sender], 0);
     }
 
     function _withdrawTreasury(uint256 _amount) internal {
-        (bool success, ) = payable(msg.sender).call{value: _amount}("");
-        require(success, "ETH transfer failed");
+        (bool success, ) = payable(msg.sender).call{value: _amount}('');
+        require(success, 'ETH transfer failed');
         userTreasuries[msg.sender] -= _amount;
         emit WithdrawTreasury(msg.sender, _amount);
     }
@@ -147,29 +133,23 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         uint256 _intervalDCA,
         uint256 _maxGasPrice
     ) public payable whenNotPaused nonReentrant {
-        require(userTreasuries[msg.sender] > 0, "Treasury must not be 0");
-        require(_amountDCA > 0, "DCA amount must be > 0");
-        require(_intervalDCA >= 60, "DCA interval must be > 60s");
+        require(userTreasuries[msg.sender] > 0, 'Treasury must not be 0');
+        require(_amountDCA > 0, 'DCA amount must be > 0');
+        require(_intervalDCA >= 60, 'DCA interval must be > 60s');
 
         usersWithPositions.add(msg.sender);
         Position storage position = positions[msg.sender];
 
         // Handle deposit
-        require(allowedTokens.contains(_tokenIn), "Token is not allowed");
+        require(allowedTokens.contains(_tokenIn), 'Token is not allowed');
 
         // Set Data
         position.user = msg.sender;
         position.tokenIn = _tokenIn;
 
         // Validate balance / approval + wallet balance can cover at least 1 DCA
-        require(
-            IERC20(_tokenIn).allowance(msg.sender, address(this)) >= _amountDCA,
-            "Approve for at least 1 DCA"
-        );
-        require(
-            IERC20(_tokenIn).balanceOf(msg.sender) >= _amountDCA,
-            "Wallet balance for at least 1 DCA"
-        );
+        require(IERC20(_tokenIn).allowance(msg.sender, address(this)) >= _amountDCA, 'Approve for at least 1 DCA');
+        require(IERC20(_tokenIn).balanceOf(msg.sender) >= _amountDCA, 'Wallet balance for at least 1 DCA');
 
         position.amountDCA = _amountDCA;
         position.intervalDCA = _intervalDCA;
@@ -181,15 +161,12 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         address out;
         for (uint256 i = 0; i < _outs.length; i++) {
             out = _outs[i].token;
-            require(out != _tokenIn, "Same token both sides of pair");
-            require(allowedTokens.contains(out), "Token is not allowed");
-            require(!blacklistedPairs[_tokenIn][out], "Pair is blacklisted");
-            require(_outs[i].maxSlippage >= minSlippage, "Invalid slippage");
-            require(_outs[i].weight > 0, "Non zero weight");
-            require(
-                _validRoute(_tokenIn, position.amountDCA, out, _outs[i]),
-                "Invalid route"
-            );
+            require(out != _tokenIn, 'Same token both sides of pair');
+            require(allowedTokens.contains(out), 'Token is not allowed');
+            require(!blacklistedPairs[_tokenIn][out], 'Pair is blacklisted');
+            require(_outs[i].maxSlippage >= minSlippage, 'Invalid slippage');
+            require(_outs[i].weight > 0, 'Non zero weight');
+            require(_validRoute(_tokenIn, position.amountDCA, out, _outs[i]), 'Invalid route');
             weightsSum += _outs[i].weight;
             position.outs.push(
                 PositionOut({
@@ -201,16 +178,9 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
                 })
             );
         }
-        require(weightsSum == 10_000, "Weights do not sum to 10000");
+        require(weightsSum == 10_000, 'Weights do not sum to 10000');
 
-        emit SetPosition(
-            msg.sender,
-            _tokenIn,
-            position.outs,
-            _amountDCA,
-            _intervalDCA,
-            _maxGasPrice
-        );
+        emit SetPosition(msg.sender, _tokenIn, position.outs, _amountDCA, _intervalDCA, _maxGasPrice);
 
         // New position needs to be initialized (must call from array of positions to persist taskId)
         _checkAndInitializeTask(positions[msg.sender]);
@@ -219,16 +189,14 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     function reInitPosition() public whenNotPaused positionExists nonReentrant {
         Position storage position = positions[msg.sender];
 
-        require(position.taskId == bytes32(0), "Task already initialized");
+        require(position.taskId == bytes32(0), 'Task already initialized');
         require(
-            IERC20(position.tokenIn).allowance(msg.sender, address(this)) >=
-                position.amountDCA,
-            "Approve for at least 1 DCA"
+            IERC20(position.tokenIn).allowance(msg.sender, address(this)) >= position.amountDCA,
+            'Approve for at least 1 DCA'
         );
         require(
-            IERC20(position.tokenIn).balanceOf(msg.sender) >=
-                position.amountDCA,
-            "Wallet balance for at least 1 DCA"
+            IERC20(position.tokenIn).balanceOf(msg.sender) >= position.amountDCA,
+            'Wallet balance for at least 1 DCA'
         );
 
         _checkAndInitializeTask(position);
@@ -241,7 +209,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         _withdrawTreasury(userTreasuries[msg.sender]);
 
         // Stop task
-        _finalizeTask(position, "User exited");
+        _finalizeTask(position, 'User exited');
 
         // Clear data
         position.user = address(0);
@@ -263,64 +231,44 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             address(this),
             this.executeDCA.selector,
             resolver,
-            abi.encodeWithSelector(
-                IInvolicaResolver(resolver).checkPositionExecutable.selector,
-                _position.user
-            ),
+            abi.encodeWithSelector(IInvolicaResolver(resolver).checkPositionExecutable.selector, _position.user),
             NATIVE_TOKEN,
             false
         );
 
-        _position.finalizationReason = "";
+        _position.finalizationReason = '';
         _position.lastDCA = 0;
 
         emit InitializeTask(_position.user, _position.taskId);
     }
 
-    function _checkAndFinalizeTask(Position storage _position, uint256 _txFee)
-        internal
-        returns (bool finalize)
-    {
+    function _checkAndFinalizeTask(Position storage _position, uint256 _txFee) internal returns (bool finalize) {
         // Funds must be approved for this contract
-        if (
-            IERC20(_position.tokenIn).allowance(_position.user, address(this)) <
-            _position.amountDCA
-        ) {
-            _finalizeTask(
-                _position,
-                "Insufficient approval to pull from wallet"
-            );
+        if (_position.tokenIn != address(0) && IERC20(_position.tokenIn).allowance(_position.user, address(this)) < _position.amountDCA) {
+            _finalizeTask(_position, 'Insufficient approval to pull from wallet');
             return true;
         }
 
         // Must be enough funds for DCA
-        if (
-            IERC20(_position.tokenIn).balanceOf(_position.user) <
-            _position.amountDCA
-        ) {
-            _finalizeTask(_position, "Insufficient funds to pull from wallet");
+        if (_position.tokenIn != address(0) && IERC20(_position.tokenIn).balanceOf(_position.user) < _position.amountDCA) {
+            _finalizeTask(_position, 'Insufficient funds to pull from wallet');
             return true;
         }
 
-        if (
-            userTreasuries[_position.user] == 0 ||
-            userTreasuries[_position.user] < _txFee
-        ) {
+        if (userTreasuries[_position.user] == 0 || userTreasuries[_position.user] < _txFee) {
             if (_txFee > 0) {
                 // Tx has fee, but isn't covered by user's treasury, empty to zero
                 userTreasuries[_position.user] = 0;
             }
 
-            _finalizeTask(_position, "Treasury out of gas");
+            _finalizeTask(_position, 'Treasury out of gas');
             return true;
         }
 
         return false;
     }
 
-    function _finalizeTask(Position storage _position, string memory _reason)
-        internal
-    {
+    function _finalizeTask(Position storage _position, string memory _reason) internal {
         if (_position.taskId == bytes32(0)) return;
 
         IOps(ops).cancelTask(_position.taskId);
@@ -340,18 +288,12 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         onlyOps
     {
         Position storage position = positions[_user];
-        require(position.user == _user, "User doesnt have a position");
-        require(
-            block.timestamp >= position.lastDCA + position.intervalDCA,
-            "DCA not mature"
-        );
+        require(position.user == _user, 'User doesnt have a position');
+        require(block.timestamp >= position.lastDCA + position.intervalDCA, 'DCA not mature');
         position.lastDCA = block.timestamp;
 
         // Validate extraData length
-        require(
-            position.outs.length == swapsAmountOutMin.length,
-            "Invalid extra data"
-        );
+        require(position.outs.length == swapsAmountOutMin.length, 'Invalid extra data');
 
         (uint256 fee, ) = IOps(ops).getFeeDetails();
         _transfer(fee, NATIVE_TOKEN);
@@ -375,29 +317,17 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     }
 
     function _setupDCA(Position storage position) internal {
-        IERC20(position.tokenIn).safeTransferFrom(
-            position.user,
-            address(this),
-            position.amountDCA
-        );
-        position.balanceIn = position.amountDCA;
+        IERC20(position.tokenIn).safeTransferFrom(position.user, address(this), position.amountDCA);
+        activeTxBalanceIn = position.amountDCA;
     }
 
-    function _executeDCASwaps(
-        Position storage position,
-        uint256[] memory swapsAmountOutMin
-    ) internal {
+    function _executeDCASwaps(Position storage position, uint256[] memory swapsAmountOutMin) internal {
         // Approve swap in amount
-        IERC20(position.tokenIn).approve(
-            address(uniRouter),
-            position.amountDCA
-        );
+        IERC20(position.tokenIn).approve(address(uniRouter), position.amountDCA);
 
         // Set up tx receipt storage
         userTxs[position.user].push();
-        UserTx storage userTx = userTxs[position.user][
-            userTxs[position.user].length - 1
-        ];
+        UserTx storage userTx = userTxs[position.user][userTxs[position.user].length - 1];
         userTx.timestamp = block.timestamp;
 
         // Execute individual token swaps
@@ -414,9 +344,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
                     position.outs[i].route
                 );
                 if (!swapErr) {
-                    position.balanceIn -=
-                        (position.amountDCA * position.outs[i].weight) /
-                        10_000;
+                    activeTxBalanceIn -= (position.amountDCA * position.outs[i].weight) / 10_000;
                     position.outs[i].balance += amounts[amounts.length - 1];
                 }
             }
@@ -428,7 +356,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
                         tokenOut: position.outs[i].token,
                         amountIn: 0,
                         amountOut: 0,
-                        err: "Invalid pair"
+                        err: 'Invalid pair'
                     })
                 );
                 continue;
@@ -451,10 +379,9 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
                 UserTokenTx({
                     tokenIn: position.tokenIn,
                     tokenOut: position.outs[i].token,
-                    amountIn: (position.amountDCA * position.outs[i].weight) /
-                        10_000,
+                    amountIn: (position.amountDCA * position.outs[i].weight) / 10_000,
                     amountOut: amounts[amounts.length - 1],
-                    err: ""
+                    err: ''
                 })
             );
         }
@@ -462,10 +389,10 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     function _finalizeDCA(Position storage position) internal {
         uint256 inAmount = position.amountDCA;
-        if (position.balanceIn > 0) {
-            IERC20(position.tokenIn).safeTransfer(position.user, position.balanceIn);
-            inAmount -= position.balanceIn;
-            position.balanceIn = 0;
+        if (activeTxBalanceIn > 0) {
+            IERC20(position.tokenIn).safeTransfer(position.user, activeTxBalanceIn);
+            inAmount -= activeTxBalanceIn;
+            activeTxBalanceIn = 0;
         }
 
         address[] memory tokens = new address[](position.outs.length);
@@ -497,13 +424,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         )
     {
         try
-            uniRouter.swapExactTokensForTokens(
-                _amountIn,
-                _amountOutMin,
-                _path,
-                address(this),
-                block.timestamp
-            )
+            uniRouter.swapExactTokensForTokens(_amountIn, _amountOutMin, _path, address(this), block.timestamp)
         returns (uint256[] memory _amounts) {
             amounts = _amounts;
             err = false;
@@ -513,20 +434,9 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         }
     }
 
-    function _transferTo(
-        address payable _to,
-        address _token,
-        uint256 _amount
-    ) internal {
-    }
-
     // FRONTEND FETCH HELPERS
 
-    function fetchAllowedTokens()
-        public
-        view
-        returns (address[] memory tokens)
-    {
+    function fetchAllowedTokens() public view returns (address[] memory tokens) {
         tokens = allowedTokens.values();
     }
 
@@ -551,13 +461,12 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         position = positions[_user];
 
         // Fetch wallet allowance and balance
-        allowance = IERC20(position.tokenIn).allowance(
-            position.user,
-            address(this)
-        );
-        balance = IERC20(position.tokenIn).balanceOf(position.user);
-        uint256 limitedValue = allowance < balance ? allowance : balance;
-        dcasRemaining = limitedValue / position.amountDCA;
+        if (userHasPosition) {
+            allowance = IERC20(position.tokenIn).allowance(position.user, address(this));
+            balance = IERC20(position.tokenIn).balanceOf(position.user);
+            uint256 limitedValue = allowance < balance ? allowance : balance;
+            dcasRemaining = position.amountDCA > 0 ?  limitedValue / position.amountDCA : 0;
+        }
 
         txs = userTxs[_user];
 
@@ -565,28 +474,20 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         for (uint256 i = 0; i < allowedTokens.length(); i++) {
             tokens[i] = UserTokenData({
                 token: allowedTokens.at(i),
-                allowance: IERC20(allowedTokens.at(i)).allowance(
-                    _user,
-                    address(this)
-                ),
+                allowance: IERC20(allowedTokens.at(i)).allowance(_user, address(this)),
                 balance: IERC20(allowedTokens.at(i)).balanceOf(_user)
             });
         }
     }
 
-    function fetchPosition(address _user)
-        public
-        view
-        override
-        returns (Position memory)
-    {
+    function fetchPosition(address _user) public view override returns (Position memory) {
         return positions[_user];
     }
 
     // ADMINISTRATION
 
     function setResolver(address _resolver) public onlyOwner {
-        require(_resolver != address(0), "Missing resolver");
+        require(_resolver != address(0), 'Missing resolver');
         resolver = _resolver;
     }
 
@@ -595,11 +496,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         else _unpause();
     }
 
-    function setAllowedTokens(
-        address[] calldata _tokens,
-        bool[] calldata _alloweds
-    ) public onlyOwner {
-        require(_tokens.length == _alloweds.length, "Invalid length");
+    function setAllowedTokens(address[] calldata _tokens, bool[] calldata _alloweds) public onlyOwner {
+        require(_tokens.length == _alloweds.length, 'Invalid length');
 
         for (uint256 i = 0; i < _tokens.length; i++) {
             _setAllowedToken(_tokens[i], _alloweds[i]);
@@ -612,18 +510,11 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         emit SetAllowedToken(_token, _allowed);
     }
 
-    function setBlacklistedPairs(
-        address[] calldata _tokens,
-        bool[] calldata _blacklisteds
-    ) public onlyOwner {
-        require(_tokens.length == (_blacklisteds.length * 2), "Invalid length");
+    function setBlacklistedPairs(address[] calldata _tokens, bool[] calldata _blacklisteds) public onlyOwner {
+        require(_tokens.length == (_blacklisteds.length * 2), 'Invalid length');
 
         for (uint256 i = 0; i < _blacklisteds.length; i++) {
-            _setBlacklistedPairs(
-                _tokens[i * 2],
-                _tokens[i * 2 + 1],
-                _blacklisteds[i]
-            );
+            _setBlacklistedPairs(_tokens[i * 2], _tokens[i * 2 + 1], _blacklisteds[i]);
         }
     }
 
@@ -637,8 +528,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     }
 
     function setMinSlippage(uint256 _minSlippage) public onlyOwner {
-        require(minSlippage != _minSlippage, "Same slippage value");
-        require(_minSlippage <= 1000, "Min slippage too large");
+        require(minSlippage != _minSlippage, 'Same slippage value');
+        require(_minSlippage <= 1000, 'Min slippage too large');
         minSlippage = _minSlippage;
 
         emit MinSlippageSet(_minSlippage);

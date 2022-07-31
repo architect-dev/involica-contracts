@@ -7,7 +7,6 @@ interface IInvolica {
     struct Position {
         address user;
         address tokenIn;
-        uint256 balanceIn;
         PositionOut[] outs;
         uint256 amountDCA;
         uint256 intervalDCA;
