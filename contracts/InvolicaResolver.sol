@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.13;
+pragma solidity 0.8.12;
 
 import {IInvolica, IInvolicaResolver} from "./interfaces/IInvolica.sol";
 import {IUniswapV2Router} from "./interfaces/IUniswapV2Router.sol";

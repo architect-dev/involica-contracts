@@ -42,6 +42,8 @@ describe('Involica Position', function () {
   let wethSwapRoute: string[]
   let btcSwapRoute: string[]
 
+  let emptyBytes32: string
+
   let snapshotId: string
   const chainId = 250
 
@@ -59,6 +61,8 @@ describe('Involica Position', function () {
     wethSwapRoute = [usdc.address, weth.address]
     btcSwapRoute = [usdc.address, weth.address, wbtc.address]
     defaultGasPrice = 100
+
+    emptyBytes32 = ethers.utils.hexZeroPad(BigNumber.from(0).toHexString(), 32)
 
     const InvolicaFactory = (await ethers.getContractFactory('Involica', deployer)) as Involica__factory
 
@@ -337,24 +341,6 @@ describe('Involica Position', function () {
         ),
       ).to.be.revertedWith('Token is not allowed')
     })
-    it('should revert if reInitPosition is called and task already exists', async function () {
-      await involica.connect(alice).setPosition(
-        usdc.address,
-        [
-          {
-            token: weth.address,
-            weight: 10000,
-            route: wethSwapRoute,
-            maxSlippage: defaultSlippage,
-          },
-        ],
-        defaultDCA,
-        defaultInterval,
-        defaultGasPrice,
-      )
-
-      await expect(involica.connect(alice).reInitPosition()).to.be.revertedWith('Task already initialized')
-    })
     it('should revert if interval is less than one minute', async () => {
       await expect(
         involica.connect(alice).setPosition(
@@ -473,6 +459,85 @@ describe('Involica Position', function () {
       const userHasPositionAfter = (await involica.fetchUserData(alice.address)).userHasPosition
       expect(userHasPositionAfter).to.be.true
     })
+  })
+
+  describe('reInitPosition()', async () => {
+    beforeEach(async () => {
+      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
+    })
+
+    it('should revert if user doesnt exist', async function () {
+      await expect(involica.connect(alice).reInitPosition()).to.be.revertedWith('User doesnt have a position')
+    })
+    it('should revert if task already exists', async function () {
+      await involica.connect(alice).setPosition(
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            route: wethSwapRoute,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+      )
+
+      await expect(involica.connect(alice).reInitPosition()).to.be.revertedWith('Task already initialized')
+    })
+    it('should revert if 0 balance treasury', async function () {
+      await involica.connect(alice).setPosition(
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            route: wethSwapRoute,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+      )
+      await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
+
+      await expect(involica.connect(alice).reInitPosition()).to.be.revertedWith('Treasury must not be 0')
+    })
+    it('should succeed if conditions met', async function () {
+      await involica.connect(alice).setPosition(
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            route: wethSwapRoute,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+      )
+      await usdc.connect(alice).approve(involica.address, 0)
+      await expect(involica.connect(ops).executeDCA(alice.address, [0]))
+        .to.emit(involica, 'FinalizeTask')
+        .withArgs(alice.address, 'Insufficient approval to pull from wallet')
+
+      const taskIdInit = (await involica.fetchUserData(alice.address)).position.taskId
+      expect(taskIdInit).to.be.eq(emptyBytes32)
+
+      await usdc.connect(alice).approve(involica.address, ethers.constants.MaxUint256)
+      const tx = await involica.connect(alice).reInitPosition()
+      expect(tx).to.emit(involica, 'InitializeTask')
+
+      const taskIdFinal = (await involica.fetchUserData(alice.address)).position.taskId
+      expect(taskIdFinal).to.not.be.null
+    })
+
+    // Remaining tests carried out in Gelato Integration
   })
 
   describe('setPosition() multiple out tokens', async () => {

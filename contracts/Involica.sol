@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.13;
+pragma solidity 0.8.12;
 
-import '@openzeppelin/contracts/access/Ownable.sol';
-import '@openzeppelin/contracts/security/Pausable.sol';
-import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
-import '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
-import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-import './external/OpsReady.sol';
-import './interfaces/IInvolica.sol';
-import './interfaces/IUniswapV2Router.sol';
-import './external/IWETH.sol';
-import './interfaces/IERC20Ext.sol';
-import 'hardhat/console.sol';
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./external/OpsReady.sol";
+import "./interfaces/IInvolica.sol";
+import "./interfaces/IUniswapV2Router.sol";
+import "./interfaces/IWETH.sol";
+import "./interfaces/IERC20Ext.sol";
 
 /*
 
@@ -190,7 +189,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         Position storage position = positions[msg.sender];
 
         require(position.taskId == bytes32(0), 'Task already initialized');
-        require(userTreasuries[position.user] > 0, 'Treasury must not be 0');
+        require(userTreasuries[msg.sender] > 0, 'Treasury must not be 0');
         require(
             IERC20(position.tokenIn).allowance(msg.sender, address(this)) >= position.amountDCA,
             'Approve for at least 1 DCA'
@@ -494,7 +493,6 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     function setResolver(address _resolver) public onlyOwner {
         require(_resolver != address(0), 'Missing resolver');
         resolver = _resolver;
-
         emit SetResolver(_resolver);
     }
 
@@ -538,7 +536,6 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         require(minSlippage != _minSlippage, 'Same slippage value');
         require(_minSlippage <= 1000, 'Min slippage too large');
         minSlippage = _minSlippage;
-
         emit MinSlippageSet(_minSlippage);
     }
 }
