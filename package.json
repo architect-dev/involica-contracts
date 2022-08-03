@@ -13,7 +13,9 @@
     "lint:prettier:tests:fix": "prettier --write 'test/**/*.ts'",
     "lint:prettier:tasks:fix": "prettier --write 'tasks/**/*.ts'",
     "lint:prettier:scripts:fix": "prettier --write 'scripts/**/*.ts'",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "deploy:llamaPayResolver": "npx hardhat --network fantom run scripts/deploy_llamapay_resolver.ts"
+
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",

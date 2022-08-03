@@ -46,7 +46,7 @@ const config: HardhatUserConfig = {
       chainId: 0xfa2,
       accounts: { mnemonic: MNEMONIC },
     },
-    ftm_mainnet: {
+    fantom: {
       url: 'https://rpc.ankr.com/fantom/',
       chainId: 250,
       accounts: { mnemonic: MNEMONIC },
