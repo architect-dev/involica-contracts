@@ -57,7 +57,12 @@ describe('Involica Resolver', function () {
     defaultGasPrice = 100
 
     const InvolicaFactory = (await ethers.getContractFactory('Involica', deployer)) as Involica__factory
-    involica = await InvolicaFactory.deploy(OPS_ADDRESS[chainId], ROUTER_ADDRESS[chainId], weth.address)
+    involica = await InvolicaFactory.deploy(
+      deployer.address,
+      OPS_ADDRESS[chainId],
+      ROUTER_ADDRESS[chainId],
+      weth.address,
+    )
     await involica.deployed()
     defaultSlippage = await involica.minSlippage()
 

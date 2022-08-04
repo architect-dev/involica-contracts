@@ -20,7 +20,6 @@ interface IInvolica {
         uint256 weight;
         address[] route;
         uint256 maxSlippage;
-        uint256 balance;
     }
 
     // Input Structure
@@ -39,6 +38,8 @@ interface IInvolica {
     }
     struct UserTx {
         uint256 timestamp;
+        address tokenIn;
+        uint256 txFee;
         UserTokenTx[] tokenTxs;
     }
     struct UserTokenTx {
@@ -72,9 +73,11 @@ interface IInvolica {
     event InitializeTask(address indexed user, bytes32 taskId);
     event FinalizeTask(address indexed user, string reason);
 
-    event FinalizeDCA(address indexed user, address indexed tokenIn, uint256 indexed inAmount, address[] outTokens, uint256[] outAmounts);
+    event FinalizeDCA(address indexed user, address indexed tokenIn, uint256 indexed inAmount, address[] outTokens, uint256[] outAmounts, uint256 involicaTxFee);
 
     // Eco Events
+    event SetInvolicaTreasury(address indexed treasury);
+    event SetInvolicaTxFee(uint256 indexed txFee);
     event SetResolver(address indexed resolver);
     event SetPaused(bool indexed paused);
     event SetAllowedToken(address indexed token, bool indexed allowed);

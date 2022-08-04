@@ -43,7 +43,12 @@ describe('Involica Base', function () {
 
     const InvolicaFactory = (await ethers.getContractFactory('Involica', deployer)) as Involica__factory
 
-    involica = await InvolicaFactory.deploy(OPS_ADDRESS[chainId], ROUTER_ADDRESS[chainId], weth.address)
+    involica = await InvolicaFactory.deploy(
+      deployer.address,
+      OPS_ADDRESS[chainId],
+      ROUTER_ADDRESS[chainId],
+      weth.address,
+    )
     await involica.deployed()
     defaultSlippage = await involica.minSlippage()
 
@@ -199,6 +204,38 @@ describe('Involica Base', function () {
       expect(await involica.paused()).to.be.eq(true)
       await expect(involica.connect(deployer).setPaused(false)).to.emit(involica, 'Unpaused').withArgs(deployer.address)
       expect(await involica.paused()).to.be.eq(false)
+    })
+  })
+
+  describe('setInvolicaTreasury()', async () => {
+    it('should revert if sender is not owner', async () => {
+      await expect(involica.connect(alice).setInvolicaTreasury(alice.address)).to.be.revertedWith(
+        'Ownable: caller is not the owner',
+      )
+    })
+    it('should revert if invalid resolver set', async () => {
+      await expect(involica.connect(deployer).setInvolicaTreasury(ethers.constants.AddressZero)).to.be.revertedWith(
+        'Missing treasury',
+      )
+    })
+    it('should set new value', async () => {
+      await expect(involica.connect(deployer).setInvolicaTreasury(alice.address))
+        .to.emit(involica, 'SetInvolicaTreasury')
+        .withArgs(alice.address)
+      expect(await involica.involicaTreasury()).to.be.eq(alice.address)
+    })
+  })
+
+  describe('setInvolicaTxFee()', async () => {
+    it('should revert if sender is not owner', async () => {
+      await expect(involica.connect(alice).setInvolicaTxFee(0)).to.be.revertedWith('Ownable: caller is not the owner')
+    })
+    it('should revert if invalid txFee set', async () => {
+      await expect(involica.connect(deployer).setInvolicaTxFee(50)).to.be.revertedWith('Invalid txFee')
+    })
+    it('should set new value', async () => {
+      await expect(involica.connect(deployer).setInvolicaTxFee(10)).to.emit(involica, 'SetInvolicaTxFee').withArgs(10)
+      expect(await involica.txFee()).to.be.eq(10)
     })
   })
 

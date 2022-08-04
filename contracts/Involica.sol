@@ -50,20 +50,24 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     uint256 public minSlippage = 25;
     uint256 public txFee = 5;
     address public resolver;
+    address public involicaTreasury;
 
     IUniswapV2Router public immutable uniRouter;
     address public constant NATIVE_TOKEN = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public immutable weth;
 
-    uint256 activeTxBalanceIn = 0;
+    uint256 activeTxAmountSwapped = 0;
+    uint256 activeTxFeeTaken = 0;
 
     receive() external payable {}
 
     constructor(
+        address _involicaTreasury,
         address payable _ops,
         address _uniRouter,
         address _weth
     ) OpsReady(_ops) {
+        involicaTreasury = _involicaTreasury;
         uniRouter = IUniswapV2Router(_uniRouter);
         weth = _weth;
 
@@ -173,8 +177,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
                     token: out,
                     weight: _outs[i].weight,
                     route: _outs[i].route,
-                    maxSlippage: _outs[i].maxSlippage,
-                    balance: 0
+                    maxSlippage: _outs[i].maxSlippage
                 })
             );
         }
@@ -324,7 +327,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     function _setupDCA(Position storage position) internal {
         IERC20(position.tokenIn).safeTransferFrom(position.user, address(this), position.amountDCA);
-        activeTxBalanceIn = position.amountDCA;
+        activeTxAmountSwapped = 0;
+        activeTxFeeTaken = 0;
     }
 
     function _executeDCASwaps(Position storage position, uint256[] memory swapsAmountOutMin) internal {
@@ -335,6 +339,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         userTxs[position.user].push();
         UserTx storage userTx = userTxs[position.user][userTxs[position.user].length - 1];
         userTx.timestamp = block.timestamp;
+        userTx.tokenIn = position.tokenIn;
 
         // Execute individual token swaps
         uint256[] memory amounts;
@@ -343,17 +348,6 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         bool swapErr;
         for (uint256 i = 0; i < position.outs.length; i++) {
             validPair = _validPair(position.tokenIn, position.outs[i].token);
-            if (validPair) {
-                (amounts, swapErr, swapErrReason) = _swap(
-                    (position.amountDCA * position.outs[i].weight) / 10_000,
-                    swapsAmountOutMin[i],
-                    position.outs[i].route
-                );
-                if (!swapErr) {
-                    activeTxBalanceIn -= (position.amountDCA * position.outs[i].weight) / 10_000;
-                    position.outs[i].balance += amounts[amounts.length - 1];
-                }
-            }
 
             if (!validPair) {
                 userTx.tokenTxs.push(
@@ -368,6 +362,12 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
                 continue;
             }
 
+            (amounts, swapErr, swapErrReason) = _swap(
+                (position.amountDCA * position.outs[i].weight * (10_000 - txFee)) / (10_000 * 10_000),
+                swapsAmountOutMin[i],
+                position.outs[i].route
+            );
+
             if (swapErr) {
                 userTx.tokenTxs.push(
                     UserTokenTx({
@@ -381,11 +381,14 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
                 continue;
             }
 
+            activeTxFeeTaken += (position.amountDCA * position.outs[i].weight * txFee) / (10_000 * 10_000);
+            activeTxAmountSwapped += amounts[0];
+
             userTx.tokenTxs.push(
                 UserTokenTx({
                     tokenIn: position.tokenIn,
                     tokenOut: position.outs[i].token,
-                    amountIn: (position.amountDCA * position.outs[i].weight) / 10_000,
+                    amountIn: amounts[0],
                     amountOut: amounts[amounts.length - 1],
                     err: ''
                 })
@@ -417,28 +420,47 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     }
 
     function _finalizeDCA(Position storage position) internal {
-        uint256 inAmount = position.amountDCA;
-        if (activeTxBalanceIn > 0) {
-            IERC20(position.tokenIn).safeTransfer(position.user, activeTxBalanceIn);
-            inAmount -= activeTxBalanceIn;
-            activeTxBalanceIn = 0;
-        }
+        UserTx storage userTx = userTxs[position.user][userTxs[position.user].length - 1];
 
-        address[] memory tokens = new address[](position.outs.length);
-        uint256[] memory amounts = new uint256[](position.outs.length);
-        for (uint256 i = 0; i < position.outs.length; i++) {
-            tokens[i] = position.outs[i].token;
-            amounts[i] = position.outs[i].balance;
-            if (position.outs[i].balance > 0) {
-                IERC20(position.outs[i].token).safeTransfer(position.user, position.outs[i].balance);
-                position.outs[i].balance = 0;
+        // Transfer swap out tokens to user's wallet, populate 
+        address[] memory tokens = new address[](userTx.tokenTxs.length);
+        uint256[] memory amounts = new uint256[](userTx.tokenTxs.length);
+        for (uint256 i = 0; i < userTx.tokenTxs.length; i++) {
+            tokens[i] = userTx.tokenTxs[i].tokenOut;
+            amounts[i] = userTx.tokenTxs[i].amountOut;
+            if (amounts[i] > 0) {
+                IERC20(tokens[i]).safeTransfer(position.user, amounts[i]);
             }
         }
 
-        emit FinalizeDCA(position.user, position.tokenIn, inAmount, tokens, amounts);
+        // Take any fee
+        if (activeTxFeeTaken > 0) {
+            IERC20(position.tokenIn).safeTransfer(involicaTreasury, activeTxFeeTaken);
+            userTxs[position.user][userTxs[position.user].length - 1].txFee = activeTxFeeTaken;
+        }
+
+        // Return unused funds from failed swaps
+        if ((activeTxAmountSwapped + activeTxFeeTaken) < position.amountDCA) {
+            IERC20(position.tokenIn).safeTransfer(position.user, position.amountDCA - (activeTxAmountSwapped + activeTxFeeTaken));
+        }
+
+        emit FinalizeDCA(position.user, position.tokenIn, activeTxAmountSwapped, tokens, amounts, activeTxFeeTaken);
     }
 
     // ADMINISTRATION
+
+    function setInvolicaTreasury(address _treasury) public onlyOwner {
+        require(_treasury != address(0), 'Missing treasury');
+        involicaTreasury = _treasury;
+        emit SetInvolicaTreasury(_treasury);
+    }
+
+    function setInvolicaTxFee(uint256 _txFee) public onlyOwner {
+        require(_txFee <= 30, 'Invalid txFee');
+        txFee = _txFee;
+        activeTxFeeTaken = 0; // Reset this value here so it doesnt have to happen every DCA
+        emit SetInvolicaTxFee(_txFee);
+    }
 
     function setResolver(address _resolver) public onlyOwner {
         require(_resolver != address(0), 'Missing resolver');

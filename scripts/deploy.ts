@@ -18,7 +18,7 @@ async function main() {
   // DEPLOY INVOLICA
   const InvolicaFactory = await hre.ethers.getContractFactory('Involica', signer)
 
-  const involicaConstructorArgs = [OPS_ADDRESS[chainId], ROUTER_ADDRESS[chainId], WETH_ADDRESS[chainId]]
+  const involicaConstructorArgs = [signer, OPS_ADDRESS[chainId], ROUTER_ADDRESS[chainId], WETH_ADDRESS[chainId]]
   const involica = await InvolicaFactory.deploy(...involicaConstructorArgs)
   await involica.deployed()
   console.log('Involica deployed to:', involica.address)
