@@ -58,11 +58,6 @@ abstract contract OpsReady {
         gelato = IOps(_ops).gelato();
     }
 
-    modifier onlyOps() {
-        require(msg.sender == ops, "OpsReady: onlyOps");
-        _;
-    }
-
     function _transfer(uint256 _amount, address _paymentToken) internal {
         if (_paymentToken == ETH) {
             (bool success, ) = gelato.call{value: _amount}("");

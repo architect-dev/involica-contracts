@@ -7,6 +7,7 @@ import '@nomiclabs/hardhat-ethers'
 import '@nomiclabs/hardhat-waffle'
 import 'hardhat-gas-reporter'
 import 'solidity-coverage'
+import 'hardhat-contract-sizer'
 
 import { HardhatUserConfig } from 'hardhat/types'
 import { MNEMONIC, ETHERSCAN_API_KEY } from './constants'
@@ -46,7 +47,7 @@ const config: HardhatUserConfig = {
       chainId: 0xfa2,
       accounts: { mnemonic: MNEMONIC },
     },
-    ftm_mainnet: {
+    fantom: {
       url: 'https://rpc.ankr.com/fantom/',
       chainId: 250,
       accounts: { mnemonic: MNEMONIC },
@@ -65,6 +66,13 @@ const config: HardhatUserConfig = {
   },
   mocha: {
     timeout: 0,
+  },
+  contractSizer: {
+    alphaSort: true,
+    disambiguatePaths: false,
+    runOnCompile: false,
+    strict: true,
+    only: [':Involica$', ':InvolicaResolver$', ':Oracle'],
   },
 }
 

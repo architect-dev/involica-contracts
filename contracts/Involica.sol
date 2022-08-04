@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.12;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./external/OpsReady.sol";
-import "./interfaces/IInvolica.sol";
-import "./interfaces/IUniswapV2Router.sol";
-import "./interfaces/IWETH.sol";
-import "./interfaces/IERC20Ext.sol";
+import '@openzeppelin/contracts/access/Ownable.sol';
+import '@openzeppelin/contracts/security/Pausable.sol';
+import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
+import '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
+import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import './external/OpsReady.sol';
+import './interfaces/IInvolica.sol';
+import './interfaces/IUniswapV2Router.sol';
+import './interfaces/IWETH.sol';
+import './interfaces/IERC20Ext.sol';
 
 /*
 
@@ -30,7 +30,7 @@ DCA into a full portfolio effortlessly
 DCA, or Dollar Cost Averaging, is the practice of regularly buying assets
 over a long duration to reduce exposure to market volatility.
 
-The involica service is provided with no fee, no token required to use, and no tax.
+Involica has a 0.05% fee on trade to keep the lights on.
 
 
 */
@@ -48,6 +48,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     EnumerableSet.AddressSet allowedTokens;
     mapping(address => mapping(address => bool)) public blacklistedPairs;
     uint256 public minSlippage = 25;
+    uint256 public txFee = 5;
     address public resolver;
 
     IUniswapV2Router public immutable uniRouter;
@@ -289,8 +290,9 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         override
         whenNotPaused
         nonReentrant
-        onlyOps
     {
+        require(msg.sender == ops || msg.sender == _user, 'Only GelatoOps or User can Execute DCA');
+
         Position storage position = positions[_user];
         require(position.user == _user, 'User doesnt have a position');
         require(block.timestamp >= position.lastDCA + position.intervalDCA, 'DCA not mature');
@@ -391,6 +393,29 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         }
     }
 
+    function _swap(
+        uint256 _amountIn,
+        uint256 _amountOutMin,
+        address[] memory _path
+    )
+        internal
+        returns (
+            uint256[] memory amounts,
+            bool err,
+            string memory errReason
+        )
+    {
+        try
+            uniRouter.swapExactTokensForTokens(_amountIn, _amountOutMin, _path, address(this), block.timestamp)
+        returns (uint256[] memory _amounts) {
+            amounts = _amounts;
+            err = false;
+        } catch Error(string memory _errReason) {
+            errReason = _errReason;
+            err = true;
+        }
+    }
+
     function _finalizeDCA(Position storage position) internal {
         uint256 inAmount = position.amountDCA;
         if (activeTxBalanceIn > 0) {
@@ -413,29 +438,56 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         emit FinalizeDCA(position.user, position.tokenIn, inAmount, tokens, amounts);
     }
 
-    // HELPERS
+    // ADMINISTRATION
 
-    function _swap(
-        uint256 _amountIn,
-        uint256 _amountOutMin,
-        address[] memory _path
-    )
-        internal
-        returns (
-            uint256[] memory amounts,
-            bool err,
-            string memory errReason
-        )
-    {
-        try
-            uniRouter.swapExactTokensForTokens(_amountIn, _amountOutMin, _path, address(this), block.timestamp)
-        returns (uint256[] memory _amounts) {
-            amounts = _amounts;
-            err = false;
-        } catch Error(string memory _errReason) {
-            errReason = _errReason;
-            err = true;
+    function setResolver(address _resolver) public onlyOwner {
+        require(_resolver != address(0), 'Missing resolver');
+        resolver = _resolver;
+        emit SetResolver(_resolver);
+    }
+
+    function setPaused(bool _setPause) public onlyOwner {
+        if (_setPause) _pause();
+        else _unpause();
+        emit SetPaused(_setPause);
+    }
+
+    function setAllowedTokens(address[] calldata _tokens, bool[] calldata _alloweds) public onlyOwner {
+        require(_tokens.length == _alloweds.length, 'Invalid length');
+
+        for (uint256 i = 0; i < _tokens.length; i++) {
+            _setAllowedToken(_tokens[i], _alloweds[i]);
         }
+    }
+
+    function _setAllowedToken(address _token, bool _allowed) internal {
+        if (_allowed) allowedTokens.add(_token);
+        else allowedTokens.remove(_token);
+        emit SetAllowedToken(_token, _allowed);
+    }
+
+    function setBlacklistedPairs(address[] calldata _tokens, bool[] calldata _blacklisteds) public onlyOwner {
+        require(_tokens.length == (_blacklisteds.length * 2), 'Invalid length');
+
+        for (uint256 i = 0; i < _blacklisteds.length; i++) {
+            _setBlacklistedPairs(_tokens[i * 2], _tokens[i * 2 + 1], _blacklisteds[i]);
+        }
+    }
+
+    function _setBlacklistedPairs(
+        address _tokenA,
+        address _tokenB,
+        bool _blacklisted
+    ) internal {
+        blacklistedPairs[_tokenA][_tokenB] = _blacklisted;
+        emit SetBlacklistedPair(_tokenA, _tokenB, _blacklisted);
+    }
+
+    function setMinSlippage(uint256 _minSlippage) public onlyOwner {
+        require(minSlippage != _minSlippage, 'Same slippage value');
+        require(_minSlippage <= 1000, 'Min slippage too large');
+        minSlippage = _minSlippage;
+        emit MinSlippageSet(_minSlippage);
     }
 
     // FRONTEND FETCH HELPERS
@@ -486,56 +538,5 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     function fetchPosition(address _user) public view override returns (Position memory) {
         return positions[_user];
-    }
-
-    // ADMINISTRATION
-
-    function setResolver(address _resolver) public onlyOwner {
-        require(_resolver != address(0), 'Missing resolver');
-        resolver = _resolver;
-        emit SetResolver(_resolver);
-    }
-
-    function setPaused(bool _setPause) public onlyOwner {
-        if (_setPause) _pause();
-        else _unpause();
-    }
-
-    function setAllowedTokens(address[] calldata _tokens, bool[] calldata _alloweds) public onlyOwner {
-        require(_tokens.length == _alloweds.length, 'Invalid length');
-
-        for (uint256 i = 0; i < _tokens.length; i++) {
-            _setAllowedToken(_tokens[i], _alloweds[i]);
-        }
-    }
-
-    function _setAllowedToken(address _token, bool _allowed) internal {
-        if (_allowed) allowedTokens.add(_token);
-        else allowedTokens.remove(_token);
-        emit SetAllowedToken(_token, _allowed);
-    }
-
-    function setBlacklistedPairs(address[] calldata _tokens, bool[] calldata _blacklisteds) public onlyOwner {
-        require(_tokens.length == (_blacklisteds.length * 2), 'Invalid length');
-
-        for (uint256 i = 0; i < _blacklisteds.length; i++) {
-            _setBlacklistedPairs(_tokens[i * 2], _tokens[i * 2 + 1], _blacklisteds[i]);
-        }
-    }
-
-    function _setBlacklistedPairs(
-        address _tokenA,
-        address _tokenB,
-        bool _blacklisted
-    ) internal {
-        blacklistedPairs[_tokenA][_tokenB] = _blacklisted;
-        emit SetBlacklistedPair(_tokenA, _tokenB, _blacklisted);
-    }
-
-    function setMinSlippage(uint256 _minSlippage) public onlyOwner {
-        require(minSlippage != _minSlippage, 'Same slippage value');
-        require(_minSlippage <= 1000, 'Min slippage too large');
-        minSlippage = _minSlippage;
-        emit MinSlippageSet(_minSlippage);
     }
 }

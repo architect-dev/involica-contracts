@@ -76,6 +76,7 @@ interface IInvolica {
 
     // Eco Events
     event SetResolver(address indexed resolver);
+    event SetPaused(bool indexed paused);
     event SetAllowedToken(address indexed token, bool indexed allowed);
     event SetBlacklistedPair(
         address indexed tokenA,
