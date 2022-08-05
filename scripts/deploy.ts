@@ -1,8 +1,9 @@
+/* eslint-disable no-console */
 import hre from 'hardhat'
 import { OPS_ADDRESS, ROUTER_ADDRESS, WETH_ADDRESS } from '../constants'
 
 // eslint-disable-next-line @typescript-eslint/ban-types
-export const failableVerify = async (args: Object) => {
+export const failableVerify = async (args: Object): Promise<void> => {
   try {
     await hre.run('verify:verify', args)
   } catch (err: any) {

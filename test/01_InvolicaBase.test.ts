@@ -1,75 +1,84 @@
-import { ethers, network } from 'hardhat'
-import { Involica, Involica__factory, IERC20 } from '../typechain'
-
+import { ethers } from 'hardhat'
+import { Involica, IERC20, InvolicaFetcher } from '../typechain'
 import chai from 'chai'
 import { solidity } from 'ethereum-waffle'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
-import { OPS_ADDRESS, ROUTER_ADDRESS, USDC_ADDRESS, USDC_DECIMALS, WBTC_ADDRESS, WETH_ADDRESS } from '../constants'
 import { BigNumber } from '@ethersproject/bignumber'
-import { mintUsdc } from './utils'
-import { parseEther, parseUnits } from '@ethersproject/units'
+import { prepare } from './utils'
 
 const { expect } = chai
 chai.use(solidity)
 
 describe('Involica Base', function () {
+  // let chainId: number
+  // let signers: SignerWithAddress[]
+
   let deployer: SignerWithAddress
   let alice: SignerWithAddress
+  // let bob: SignerWithAddress
 
-  let ops: SignerWithAddress
-
-  let involica: Involica
+  // let opsSigner: SignerWithAddress
+  // let gelato: SignerWithAddress
+  // let opsGelatoSigner: SignerWithAddress
 
   let usdc: IERC20
   let weth: IERC20
   let wbtc: IERC20
 
   let defaultTreasuryFund: BigNumber
-  let defaultFund: BigNumber
+  // let defaultFund: BigNumber
+  // let defaultDCA: BigNumber
+  // let defaultFee: BigNumber
   let defaultSlippage: BigNumber
+  // let defaultGasPrice: BigNumberish
+  // let defaultInterval: BigNumberish
+  // let defaultGelatoFee: BigNumber
+  // let wethSwapRoute: string[]
+  // let btcSwapRoute: string[]
+
+  let involica: Involica
+  // let resolver: InvolicaResolver
+  // let oracle: Oracle
+  let fetcher: InvolicaFetcher
+  // let ops: IOps
+
+  // let emptyBytes32: string
+  // let aliceResolverHash: string
 
   let snapshotId: string
-  const chainId = 250
 
   before('setup contracts', async () => {
-    ;[deployer, alice] = await ethers.getSigners()
-
-    usdc = <IERC20>await ethers.getContractAt('IERC20', USDC_ADDRESS[chainId])
-    weth = <IERC20>await ethers.getContractAt('IERC20', WETH_ADDRESS[chainId])
-    wbtc = <IERC20>await ethers.getContractAt('IERC20', WBTC_ADDRESS[chainId])
-
-    defaultTreasuryFund = parseEther('0.5')
-    defaultFund = parseUnits('10000', USDC_DECIMALS)
-
-    const InvolicaFactory = (await ethers.getContractFactory('Involica', deployer)) as Involica__factory
-
-    involica = await InvolicaFactory.deploy(
-      deployer.address,
-      OPS_ADDRESS[chainId],
-      ROUTER_ADDRESS[chainId],
-      weth.address,
-    )
-    await involica.deployed()
-    defaultSlippage = await involica.minSlippage()
-
-    await involica.connect(deployer).setAllowedTokens([usdc.address, wbtc.address], [true, true])
-
-    await mintUsdc(chainId, defaultFund.mul(10), alice.address)
-    await usdc.connect(alice).approve(involica.address, ethers.constants.MaxUint256)
-
-    // Impersonate ops
-    await network.provider.request({
-      method: 'hardhat_impersonateAccount',
-      params: [OPS_ADDRESS[chainId]],
-    })
-
-    ops = await ethers.getSigner(OPS_ADDRESS[chainId])
-
-    // Fund ops
-    await network.provider.send('hardhat_setBalance', [ops.address, parseEther('1')._hex.replace('0x0', '0x')])
-
-    // Take snapshot
-    snapshotId = await ethers.provider.send('evm_snapshot', [])
+    ;({
+      // chainId,
+      // signers,
+      deployer,
+      alice,
+      // bob,
+      // opsSigner,
+      // gelato,
+      // opsGelatoSigner,
+      usdc,
+      weth,
+      wbtc,
+      defaultTreasuryFund,
+      // defaultFund,
+      // defaultDCA,
+      // defaultFee,
+      defaultSlippage,
+      // defaultGasPrice,
+      // defaultInterval,
+      // defaultGelatoFee,
+      // wethSwapRoute,
+      // btcSwapRoute,
+      involica,
+      // resolver,
+      // oracle,
+      fetcher,
+      // ops,
+      // emptyBytes32,
+      // aliceResolverHash,
+      snapshotId,
+    } = await prepare(250))
   })
 
   beforeEach(async () => {
@@ -88,11 +97,11 @@ describe('Involica Base', function () {
       expect(involica.connect(alice).depositTreasury({ value: 0 })).to.be.revertedWith('msg.value must be > 0')
     })
     it('should deposit to treasury successfully', async function () {
-      const userTreasuryBefore = (await involica.fetchUserData(alice.address)).userTreasury
+      const userTreasuryBefore = (await fetcher.fetchUserData(alice.address)).userTreasury
 
       const tx = await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
 
-      const userTreasuryAfter = (await involica.fetchUserData(alice.address)).userTreasury
+      const userTreasuryAfter = (await fetcher.fetchUserData(alice.address)).userTreasury
 
       expect(tx).to.emit(involica, 'DepositTreasury').withArgs(alice.address, defaultTreasuryFund)
       expect(tx).to.changeEtherBalance(involica, defaultTreasuryFund)
@@ -117,11 +126,11 @@ describe('Involica Base', function () {
       expect(involica.connect(alice).withdrawTreasury(defaultTreasuryFund.mul(2))).to.be.revertedWith('Bad withdraw')
     })
     it('should withdraw from treasury successfully', async function () {
-      const userTreasuryBefore = (await involica.fetchUserData(alice.address)).userTreasury
+      const userTreasuryBefore = (await fetcher.fetchUserData(alice.address)).userTreasury
 
       const tx = await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
 
-      const userTreasuryAfter = (await involica.fetchUserData(alice.address)).userTreasury
+      const userTreasuryAfter = (await fetcher.fetchUserData(alice.address)).userTreasury
 
       expect(tx).to.emit(involica, 'WithdrawTreasury').withArgs(alice.address, defaultTreasuryFund)
       expect(tx).to.changeEtherBalance(involica, defaultTreasuryFund.mul(-1))

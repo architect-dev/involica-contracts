@@ -1,102 +1,88 @@
-import { ethers, network } from 'hardhat'
-import { Involica, InvolicaResolver, InvolicaResolver__factory, Involica__factory, IERC20 } from '../typechain'
-
+import { ethers } from 'hardhat'
+import { Involica, InvolicaResolver, IERC20 } from '../typechain'
 import chai from 'chai'
 import { solidity } from 'ethereum-waffle'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
-import { OPS_ADDRESS, ROUTER_ADDRESS, USDC_ADDRESS, USDC_DECIMALS, WBTC_ADDRESS, WETH_ADDRESS } from '../constants'
 import { BigNumber, BigNumberish } from '@ethersproject/bignumber'
-import { mintUsdc, parseGwei } from './utils'
-import { parseUnits } from '@ethersproject/units'
+import { parseGwei, prepare } from './utils'
 import { Contract } from 'ethers/lib/ethers'
-import { parseEther, toUtf8String } from 'ethers/lib/utils'
+import { toUtf8String } from 'ethers/lib/utils'
 
 const { expect } = chai
 chai.use(solidity)
 
 describe('Involica Resolver', function () {
-  let deployer: SignerWithAddress
+  // let chainId: number
+  // let signers: SignerWithAddress[]
+
+  // let deployer: SignerWithAddress
   let alice: SignerWithAddress
-  let bob: SignerWithAddress
+  // let bob: SignerWithAddress
 
-  let ops: SignerWithAddress
-
-  let involica: Involica
-  let resolver: InvolicaResolver
-  let uniRouter: Contract
+  let opsSigner: SignerWithAddress
+  // let gelato: SignerWithAddress
+  // let opsGelatoSigner: SignerWithAddress
 
   let usdc: IERC20
   let weth: IERC20
   let wbtc: IERC20
 
   let defaultTreasuryFund: BigNumber
-  let defaultFund: BigNumber
+  // let defaultFund: BigNumber
   let defaultDCA: BigNumber
-  let defaultInterval: BigNumberish
-  let defaultGasPrice: BigNumberish
+  // let defaultFee: BigNumber
   let defaultSlippage: BigNumber
+  let defaultGasPrice: BigNumberish
+  let defaultInterval: BigNumberish
+  // let defaultGelatoFee: BigNumber
   let wethSwapRoute: string[]
-  let wbtcSwapRoute: string[]
+  let btcSwapRoute: string[]
+
+  let involica: Involica
+  let resolver: InvolicaResolver
+  // let oracle: Oracle
+  // let fetcher: InvolicaFetcher
+  // let ops: IOps
+  let uniRouter: Contract
+
+  // let emptyBytes32: string
+  // let aliceResolverHash: string
 
   let snapshotId: string
-  const chainId = 250
 
   before('setup contracts', async () => {
-    ;[deployer, alice, bob] = await ethers.getSigners()
-
-    usdc = <IERC20>await ethers.getContractAt('IERC20', USDC_ADDRESS[chainId])
-    weth = <IERC20>await ethers.getContractAt('IERC20', WETH_ADDRESS[chainId])
-    wbtc = <IERC20>await ethers.getContractAt('IERC20', WBTC_ADDRESS[chainId])
-
-    defaultTreasuryFund = parseEther('0.5')
-    defaultFund = parseUnits('10000', USDC_DECIMALS)
-    defaultDCA = defaultFund.div(10)
-    defaultInterval = 60 // second;
-    wethSwapRoute = [usdc.address, weth.address]
-    wbtcSwapRoute = [usdc.address, weth.address, wbtc.address]
-    defaultGasPrice = 100
-
-    const InvolicaFactory = (await ethers.getContractFactory('Involica', deployer)) as Involica__factory
-    involica = await InvolicaFactory.deploy(
-      deployer.address,
-      OPS_ADDRESS[chainId],
-      ROUTER_ADDRESS[chainId],
-      weth.address,
-    )
-    await involica.deployed()
-    defaultSlippage = await involica.minSlippage()
-
-    const InvolicaResolverFactory = (await ethers.getContractFactory(
-      'InvolicaResolver',
-      deployer,
-    )) as InvolicaResolver__factory
-    resolver = await InvolicaResolverFactory.deploy(involica.address, ROUTER_ADDRESS[chainId])
-    await resolver.deployed()
-
-    await involica.connect(deployer).setResolver(resolver.address)
-
-    uniRouter = await ethers.getContractAt('IUniswapV2Router', ROUTER_ADDRESS[chainId])
-
-    await involica.connect(deployer).setAllowedTokens([usdc.address, wbtc.address], [true, true])
-
-    await mintUsdc(chainId, defaultFund.mul(10), alice.address)
-    await mintUsdc(chainId, defaultFund.mul(10), bob.address)
-
-    await usdc.connect(alice).approve(involica.address, ethers.constants.MaxUint256)
-    await usdc.connect(bob).approve(involica.address, ethers.constants.MaxUint256)
-
-    // Impersonate ops
-    await network.provider.request({
-      method: 'hardhat_impersonateAccount',
-      params: [OPS_ADDRESS[chainId]],
-    })
-
-    ops = await ethers.getSigner(OPS_ADDRESS[chainId])
-
-    // Fund ops
-    await network.provider.send('hardhat_setBalance', [ops.address, parseEther('1')._hex.replace('0x0', '0x')])
-
-    snapshotId = await ethers.provider.send('evm_snapshot', [])
+    ;({
+      // chainId,
+      // signers,
+      // deployer,
+      alice,
+      // bob,
+      opsSigner,
+      // gelato,
+      // opsGelatoSigner,
+      usdc,
+      weth,
+      wbtc,
+      defaultTreasuryFund,
+      // defaultFund,
+      defaultDCA,
+      // defaultFee,
+      defaultSlippage,
+      defaultGasPrice,
+      defaultInterval,
+      // defaultGelatoFee,
+      wethSwapRoute,
+      btcSwapRoute,
+      involica,
+      resolver,
+      // oracle,
+      // fetcher,
+      // ops,
+      uniRouter,
+      // emptyBytes32,
+      // aliceResolverHash,
+      snapshotId,
+    } = await prepare(250))
   })
 
   beforeEach(async () => {
@@ -119,7 +105,7 @@ describe('Involica Resolver', function () {
           {
             token: wbtc.address,
             weight: 5000,
-            route: wbtcSwapRoute,
+            route: btcSwapRoute,
             maxSlippage: defaultSlippage,
           },
         ],
@@ -137,7 +123,7 @@ describe('Involica Resolver', function () {
       expect(toUtf8String(payload)).to.be.eq('User doesnt have a position')
     })
     it('should return false if user position not mature', async () => {
-      await involica.connect(ops).executeDCA(alice.address, [0, 0])
+      await involica.connect(opsSigner).executeDCA(alice.address, [0, 0])
 
       const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)
       expect(canExec).to.be.eq(false)
@@ -161,7 +147,7 @@ describe('Involica Resolver', function () {
       expect(canExec).to.be.eq(true)
 
       const wethAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), wethSwapRoute)
-      const wbtcAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), wbtcSwapRoute)
+      const wbtcAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), btcSwapRoute)
 
       const wethAmountOutMin: BigNumber = wethAmounts[wethAmounts.length - 1]
         .mul(BigNumber.from(10000).sub(defaultSlippage))
@@ -182,7 +168,7 @@ describe('Involica Resolver', function () {
       expect(canExec).to.be.eq(true)
 
       const wethAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), wethSwapRoute)
-      const wbtcAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), wbtcSwapRoute)
+      const wbtcAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), btcSwapRoute)
 
       const wethAmountOutMin: BigNumber = wethAmounts[wethAmounts.length - 1]
         .mul(BigNumber.from(10000).sub(defaultSlippage))
@@ -198,7 +184,7 @@ describe('Involica Resolver', function () {
 
       expect(payload).to.be.eq(taskData)
 
-      const tx = await ops.sendTransaction({
+      const tx = await opsSigner.sendTransaction({
         to: involica.address,
         data: taskData,
       })
