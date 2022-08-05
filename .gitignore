@@ -7,10 +7,6 @@ package-lock.json
 yarn.lock
 yarn-error.log
 
-#Coverage
-coverage.json
-coverage/
-
 #Hardhat files
 cache
 artifacts

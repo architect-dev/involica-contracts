@@ -67,4 +67,8 @@ contract InvolicaFetcher {
             });
         }
     }
+
+    function fetchPairRoute (address token0, address token1) public view returns (address[] memory) {
+        return oracle.getRoute(token0, token1);
+    }
 }
