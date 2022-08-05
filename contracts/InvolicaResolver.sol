@@ -22,7 +22,7 @@ contract InvolicaResolver is IInvolicaResolver {
         view
         returns (bool canExec, bytes memory execPayload)
     {
-        IInvolica.Position memory position = involica.fetchPosition(_user);
+        IInvolica.Position memory position = involica.fetchUserPosition(_user);
 
         if (position.user != _user || position.taskId == bytes32(0)) return (false, bytes("User doesnt have a position"));
         if (block.timestamp < (position.lastDCA + position.intervalDCA)) return (false, bytes("DCA not mature"));

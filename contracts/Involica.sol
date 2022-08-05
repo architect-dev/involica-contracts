@@ -40,7 +40,6 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.UintSet;
 
-    EnumerableSet.AddressSet usersWithPositions;
     mapping(address => Position) public positions;
     mapping(address => UserTx[]) public userTxs;
     mapping(address => uint256) public userTreasuries;
@@ -92,7 +91,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         address _tokenIn,
         uint256 _amountIn,
         address _out,
-        TokenOutParams memory _tokenOut
+        PositionOut memory _tokenOut
     ) internal view returns (bool) {
         if (_tokenIn != _tokenOut.route[0] || _out != _tokenOut.route[_tokenOut.route.length - 1]) return false;
         try uniRouter.getAmountsOut((_amountIn * _tokenOut.weight) / 10_000, _tokenOut.route) {
@@ -132,7 +131,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     function setPosition(
         address _tokenIn,
-        TokenOutParams[] memory _outs,
+        PositionOut[] memory _outs,
         uint256 _amountDCA,
         uint256 _intervalDCA,
         uint256 _maxGasPrice
@@ -140,8 +139,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         require(userTreasuries[msg.sender] > 0, 'Treasury must not be 0');
         require(_amountDCA > 0, 'DCA amount must be > 0');
         require(_intervalDCA >= 60, 'DCA interval must be > 60s');
+        require(_outs.length <= 6, 'No more than 6 out tokens');
 
-        usersWithPositions.add(msg.sender);
         Position storage position = positions[msg.sender];
 
         // Handle deposit
@@ -217,7 +216,6 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
         // Clear data
         position.user = address(0);
-        usersWithPositions.remove(msg.sender);
 
         emit ExitPosition(msg.sender);
     }
@@ -280,10 +278,10 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         if (_position.taskId == bytes32(0)) return;
 
         IOps(ops).cancelTask(_position.taskId);
+        emit FinalizeTask(_position.user, _position.taskId, _reason);
+
         _position.taskId = bytes32(0);
         _position.finalizationReason = _reason;
-
-        emit FinalizeTask(_position.user, _reason);
     }
 
     // DCA EXECUTION
@@ -512,53 +510,25 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         emit MinSlippageSet(_minSlippage);
     }
 
-    // FRONTEND FETCH HELPERS
+    // PUBLIC
 
-    function fetchAllowedTokens() public view returns (address[] memory tokens) {
-        tokens = allowedTokens.values();
+    function fetchAllowedTokens() public view override returns (address[] memory) {
+        return allowedTokens.values();
     }
 
-    function fetchUserData(address _user)
-        public
-        view
-        returns (
-            bool userHasPosition,
-            uint256 userTreasury,
-            Position memory position,
-            uint256 allowance,
-            uint256 balance,
-            uint256 dcasRemaining,
-            UserTx[] memory txs,
-            UserTokenData[] memory tokens
-        )
-    {
-        userHasPosition = usersWithPositions.contains(_user);
-
-        userTreasury = userTreasuries[_user];
-
-        position = positions[_user];
-
-        // Fetch wallet allowance and balance
-        if (userHasPosition) {
-            allowance = IERC20(position.tokenIn).allowance(position.user, address(this));
-            balance = IERC20(position.tokenIn).balanceOf(position.user);
-            uint256 limitedValue = allowance < balance ? allowance : balance;
-            dcasRemaining = position.amountDCA > 0 ? limitedValue / position.amountDCA : 0;
-        }
-
-        txs = userTxs[_user];
-
-        tokens = new UserTokenData[](allowedTokens.length());
-        for (uint256 i = 0; i < allowedTokens.length(); i++) {
-            tokens[i] = UserTokenData({
-                token: allowedTokens.at(i),
-                allowance: IERC20(allowedTokens.at(i)).allowance(_user, address(this)),
-                balance: IERC20(allowedTokens.at(i)).balanceOf(_user)
-            });
-        }
+    function fetchAllowedToken(uint256 i) public view override returns (address) {
+        return allowedTokens.at(i);
     }
 
-    function fetchPosition(address _user) public view override returns (Position memory) {
-        return positions[_user];
+    function fetchUserTreasury(address user) public view override returns (uint256) {
+        return userTreasuries[user];
+    }
+
+    function fetchUserPosition(address user) public view override returns (Position memory) {
+        return positions[user];
+    }
+
+    function fetchUserTxs(address user) public view override returns (UserTx[] memory) {
+        return userTxs[user];
     }
 }

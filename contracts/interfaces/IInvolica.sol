@@ -22,14 +22,6 @@ interface IInvolica {
         uint256 maxSlippage;
     }
 
-    // Input Structure
-    struct TokenOutParams {
-        address token;
-        uint256 weight;
-        address[] route;
-        uint256 maxSlippage;
-    }
-
     // Output Structure
     struct UserTokenData {
         address token;
@@ -71,32 +63,40 @@ interface IInvolica {
     event WithdrawTreasury(address indexed user, uint256 indexed amount);
 
     event InitializeTask(address indexed user, bytes32 taskId);
-    event FinalizeTask(address indexed user, string reason);
+    event FinalizeTask(address indexed user, bytes32 taskId, string reason);
 
-    event FinalizeDCA(address indexed user, address indexed tokenIn, uint256 indexed inAmount, address[] outTokens, uint256[] outAmounts, uint256 involicaTxFee);
+    event FinalizeDCA(
+        address indexed user,
+        address indexed tokenIn,
+        uint256 indexed inAmount,
+        address[] outTokens,
+        uint256[] outAmounts,
+        uint256 involicaTxFee
+    );
 
-    // Eco Events
     event SetInvolicaTreasury(address indexed treasury);
     event SetInvolicaTxFee(uint256 indexed txFee);
     event SetResolver(address indexed resolver);
     event SetPaused(bool indexed paused);
     event SetAllowedToken(address indexed token, bool indexed allowed);
-    event SetBlacklistedPair(
-        address indexed tokenA,
-        address indexed tokenB,
-        bool indexed blacklisted
-    );
+    event SetBlacklistedPair(address indexed tokenA, address indexed tokenB, bool indexed blacklisted);
     event MinSlippageSet(uint256 indexed minSlippage);
 
-    // Interface
-    function fetchPosition(address) external view returns (Position memory);
-
+    // Callable
     function executeDCA(address, uint256[] calldata) external;
+
+    // Public
+    function fetchAllowedTokens() external view returns (address[] memory);
+
+    function fetchAllowedToken(uint256 i) external view returns (address);
+
+    function fetchUserTreasury(address user) external view returns (uint256);
+
+    function fetchUserPosition(address user) external view returns (Position memory);
+
+    function fetchUserTxs(address user) external view returns (UserTx[] memory);
 }
 
 interface IInvolicaResolver {
-    function checkPositionExecutable(address _user)
-        external
-        view
-        returns (bool canExec, bytes memory execPayload);
+    function checkPositionExecutable(address _user) external view returns (bool canExec, bytes memory execPayload);
 }

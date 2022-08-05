@@ -11,39 +11,37 @@ interface PriceRouter {
         returns (uint256[] memory amounts);
 }
 
-contract UniswapV2Oracle {
+contract Oracle {
     address public wethAddress;
     address public usdcAddress;
 
     mapping(address => PriceRouter) public routerForFactory;
-    PriceRouter public primaryRouter;
+    PriceRouter public router;
 
     address ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address zeroAddress = 0x0000000000000000000000000000000000000000;
 
     constructor(
         address _routerAddress,
-        address _factoryAddress,
         address _wethAddress,
         address _usdcAddress
     ) {
-        routerForFactory[_factoryAddress] = PriceRouter(_routerAddress);
-        primaryRouter = PriceRouter(_routerAddress);
+        router = PriceRouter(_routerAddress);
         usdcAddress = _usdcAddress;
         wethAddress = _wethAddress;
     }
 
-    function getPriceUsdc(address tokenAddress) public view returns (uint256) {
-        if (isLpToken(tokenAddress)) {
-            return getLpTokenPriceUsdc(tokenAddress);
-        }
+    function getPriceUsdc(address tokenAddress) public view returns (uint256 price, address[] memory route) {
+        // if (isLpToken(tokenAddress)) {
+        //     return getLpTokenPriceUsdc(tokenAddress);
+        // }
         return getPriceFromRouterUsdc(tokenAddress);
     }
 
     function getPriceFromRouter(address token0Address, address token1Address)
         public
         view
-        returns (uint256)
+        returns (uint256 price, address[] memory route)
     {
         // Convert ETH address (0xEeee...) to WETH
         if (token0Address == ethAddress) {
@@ -61,7 +59,10 @@ contract UniswapV2Oracle {
             token1Address == wethAddress;
         if (inputTokenIsWeth) {
             // path = [token0, weth] or [weth, token1]
-            return _amountOut(directPath);
+            return (
+                _amountOut(directPath),
+                directPath
+            );
         }
 
         // path = [token0, weth, token1] or [token0, token1]
@@ -72,13 +73,19 @@ contract UniswapV2Oracle {
 
         uint256 throughWethOut = _amountOut(throughWethPath);
         uint256 directOut = _amountOut(directPath);
-        return throughWethOut > directOut ? throughWethOut : directOut;
+        if (throughWethOut > directOut) {
+            price = throughWethOut;
+            route = throughWethPath;
+        } else {
+            price = directOut;
+            route = directPath;
+        }
     }
 
     function _amountOut(address[] memory path) internal view returns (uint256) {
         IERC20Ext token0 = IERC20Ext(path[0]);
         uint256 amountIn = 10**uint256(token0.decimals());
-        uint256[] memory amountsOut = primaryRouter.getAmountsOut(
+        uint256[] memory amountsOut = router.getAmountsOut(
             amountIn,
             path
         );
@@ -92,65 +99,66 @@ contract UniswapV2Oracle {
     function getPriceFromRouterUsdc(address tokenAddress)
         public
         view
-        returns (uint256)
+        returns (uint256 price, address[] memory route)
     {
         return getPriceFromRouter(tokenAddress, usdcAddress);
     }
 
-    function isLpToken(address tokenAddress) public view returns (bool) {
-        IUniswapV2Pair lpToken = IUniswapV2Pair(tokenAddress);
-        try lpToken.factory() {
-            return true;
-        } catch {
-            return false;
-        }
-    }
+    // function isLpToken(address tokenAddress) public view returns (bool) {
+    //     IUniswapV2Pair lpToken = IUniswapV2Pair(tokenAddress);
+    //     try lpToken.factory() {
+    //         return true;
+    //     } catch {
+    //         return false;
+    //     }
+    // }
 
-    function getRouterForLpToken(address tokenAddress)
-        public
-        view
-        returns (PriceRouter)
-    {
-        IUniswapV2Pair lpToken = IUniswapV2Pair(tokenAddress);
-        PriceRouter lpTokenRouter = routerForFactory[lpToken.factory()];
-        require(
-            address(lpTokenRouter) != address(0),
-            "No router for this token"
-        );
-        return lpTokenRouter;
-    }
+    // function getRouterForLpToken(address tokenAddress)
+    //     public
+    //     view
+    //     returns (PriceRouter)
+    // {
+    //     IUniswapV2Pair lpToken = IUniswapV2Pair(tokenAddress);
+    //     PriceRouter lpTokenRouter = routerForFactory[lpToken.factory()];
+    //     require(
+    //         address(lpTokenRouter) != address(0),
+    //         "No router for this token"
+    //     );
+    //     return lpTokenRouter;
+    // }
 
-    function getLpTokenTotalLiquidityUsdc(address tokenAddress)
-        public
-        view
-        returns (uint256)
-    {
-        IUniswapV2Pair pair = IUniswapV2Pair(tokenAddress);
-        address token0Address = pair.token0();
-        address token1Address = pair.token1();
-        IERC20Ext token0 = IERC20Ext(token0Address);
-        IERC20Ext token1 = IERC20Ext(token1Address);
-        uint256 token0Decimals = token0.decimals();
-        uint256 token1Decimals = token1.decimals();
-        uint256 token0Price = getPriceUsdc(token0Address);
-        uint256 token1Price = getPriceUsdc(token1Address);
-        (uint112 reserve0, uint112 reserve1, ) = pair.getReserves();
-        uint256 totalLiquidity = ((reserve0 / 10**token0Decimals) *
-            token0Price) + ((reserve1 / 10**token1Decimals) * token1Price);
-        return totalLiquidity;
-    }
+    // function getLpTokenTotalLiquidityUsdc(address tokenAddress)
+    //     public
+    //     view
+    //     returns (uint256)
+    // {
+    //     IUniswapV2Pair pair = IUniswapV2Pair(tokenAddress);
+    //     address token0Address = pair.token0();
+    //     address token1Address = pair.token1();
+    //     IERC20Ext token0 = IERC20Ext(token0Address);
+    //     IERC20Ext token1 = IERC20Ext(token1Address);
+    //     uint256 token0Decimals = token0.decimals();
+    //     uint256 token1Decimals = token1.decimals();
+    //     uint256 token0Price = getPriceUsdc(token0Address);
+    //     uint256 token1Price = getPriceUsdc(token1Address);
+    //     (uint112 reserve0, uint112 reserve1, ) = pair.getReserves();
+    //     uint256 totalLiquidity = ((reserve0 / 10**token0Decimals) *
+    //         token0Price) + ((reserve1 / 10**token1Decimals) * token1Price);
+    //     return totalLiquidity;
+    // }
 
-    function getLpTokenPriceUsdc(address tokenAddress)
-        public
-        view
-        returns (uint256)
-    {
-        IUniswapV2Pair pair = IUniswapV2Pair(tokenAddress);
-        uint256 totalLiquidity = getLpTokenTotalLiquidityUsdc(tokenAddress);
-        uint256 totalSupply = pair.totalSupply();
-        uint8 pairDecimals = pair.decimals();
-        uint256 pricePerLpTokenUsdc = (totalLiquidity * 10**pairDecimals) /
-            totalSupply;
-        return pricePerLpTokenUsdc;
-    }
+    // function getLpTokenPriceUsdc(address tokenAddress)
+    //     public
+    //     view
+    //     returns (uint256 price, address[] memory route)
+    // {
+    //     IUniswapV2Pair pair = IUniswapV2Pair(tokenAddress);
+    //     uint256 totalLiquidity;
+    //     (totalLiquidity, route) = getLpTokenTotalLiquidityUsdc(tokenAddress);
+    //     uint256 totalSupply = pair.totalSupply();
+    //     uint8 pairDecimals = pair.decimals();
+    //     uint256 pricePerLpTokenUsdc = (totalLiquidity * 10**pairDecimals) /
+    //         totalSupply;
+    //     return (pricePerLpTokenUsdc, route);
+    // }
 }
