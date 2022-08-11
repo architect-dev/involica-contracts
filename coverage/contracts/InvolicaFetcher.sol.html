@@ -22,7 +22,7 @@
       <div class='fl pad1y space-right2'>
         <span class="strong">100% </span>
         <span class="quiet">Statements</span>
-        <span class='fraction'>26/26</span>
+        <span class='fraction'>31/31</span>
       </div>
       <div class='fl pad1y space-right2'>
         <span class="strong">100% </span>
@@ -37,7 +37,7 @@
       <div class='fl pad1y space-right2'>
         <span class="strong">100% </span>
         <span class="quiet">Lines</span>
-        <span class='fraction'>26/26</span>
+        <span class='fraction'>31/31</span>
       </div>
     </div>
   </div>
@@ -134,7 +134,14 @@
 89
 90
 91
-92</td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+92
+93
+94
+95
+96
+97
+98
+99</td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -159,12 +166,18 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2×</span>
-<span class="cline-any cline-yes">2×</span>
-<span class="cline-any cline-yes">2×</span>
-<span class="cline-any cline-yes">2×</span>
-<span class="cline-any cline-yes">6×</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">3×</span>
+<span class="cline-any cline-yes">3×</span>
+<span class="cline-any cline-yes">3×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -195,6 +208,7 @@
 <span class="cline-any cline-yes">47×</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">54×</span>
 <span class="cline-any cline-yes">54×</span>
 <span class="cline-any cline-yes">54×</span>
 <span class="cline-any cline-yes">162×</span>
@@ -241,21 +255,27 @@ contract InvolicaFetcher {
         oracle = Oracle(_oracle);
     }
 &nbsp;
+    struct TokenData {
+        address token;
+        uint256 decimals;
+        uint256 price;
+    }
     function fetchTokensData()
         public
         view
-        returns (
-            address[] memory tokens,
-            uint256[] memory prices,
-            address[][] memory routes
-        )
+        returns ( TokenData[] memory tokensData )
     {
-        tokens = involica.fetchAllowedTokens();
-        prices = new uint256[](tokens.length);
-        routes = new address[][](tokens.length);
-        for (uint256 i = 0; i &lt; tokens.length; i++) {
-            (prices[i], routes[i]) = oracle.getPriceUsdc(tokens[i]);
+        address[] memory allowedTokens = involica.fetchAllowedTokens();
+        tokensData = new TokenData[](allowedTokens.length + 1);
+&nbsp;
+        for (uint256 i = 0; i &lt; (tokensData.length - 1); i++) {
+            tokensData[i].token = allowedTokens[i];
+            tokensData[i].decimals = IERC20Ext(allowedTokens[i]).decimals();
+            (tokensData[i].price,) = oracle.getPriceUsdc(allowedTokens[i]);
         }
+        tokensData[tokensData.length - 1].token = involica.NATIVE_TOKEN();
+        tokensData[tokensData.length - 1].decimals = 18;
+        (tokensData[tokensData.length - 1].price,) = oracle.getPriceUsdc(involica.NATIVE_TOKEN());
     }
 &nbsp;
     function fetchUserData(address _user)
@@ -286,12 +306,13 @@ contract InvolicaFetcher {
             dcasRemaining = position.amountDCA &gt; 0 ? limitedValue / position.amountDCA : 0;
         }
 &nbsp;
-        userTokensData = new IInvolica.UserTokenData[](involica.fetchAllowedTokens().length + 1);
+        address[] memory allowedTokens = involica.fetchAllowedTokens();
+        userTokensData = new IInvolica.UserTokenData[](allowedTokens.length + 1);
         for (uint256 i = 0; i &lt; (userTokensData.length - 1); i++) {
             userTokensData[i] = IInvolica.UserTokenData({
-                token: involica.fetchAllowedToken(i),
-                allowance: IERC20(involica.fetchAllowedToken(i)).allowance(_user, address(this)),
-                balance: IERC20(involica.fetchAllowedToken(i)).balanceOf(_user)
+                token: allowedTokens[i],
+                allowance: IERC20(allowedTokens[i]).allowance(_user, address(this)),
+                balance: IERC20(allowedTokens[i]).balanceOf(_user)
             });
         }
         userTokensData[userTokensData.length - 1] = IInvolica.UserTokenData({
@@ -322,7 +343,7 @@ contract InvolicaFetcher {
 </div><!-- /wrapper -->
 <div class='footer quiet pad2 space-top1 center small'>
   Code coverage
-  generated by <a href="http://istanbul-js.org/" target="_blank">istanbul</a> at Thu Aug 11 2022 17:36:06 GMT+0200 (Central European Summer Time)
+  generated by <a href="http://istanbul-js.org/" target="_blank">istanbul</a> at Thu Aug 11 2022 19:00:37 GMT+0200 (Central European Summer Time)
 </div>
 </div>
 <script src="../prettify.js"></script>

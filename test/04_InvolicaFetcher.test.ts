@@ -1,5 +1,5 @@
 import { ethers } from 'hardhat'
-import { IERC20, InvolicaFetcher } from '../typechain'
+import { IERC20, Involica, InvolicaFetcher } from '../typechain'
 import chai from 'chai'
 import { solidity } from 'ethereum-waffle'
 import { prepare } from './utils'
@@ -36,7 +36,7 @@ describe('Involica Fetcher', function () {
   // let wethSwapRoute: string[]
   let btcSwapRoute: string[]
 
-  // let involica: Involica
+  let involica: Involica
   // let resolver: InvolicaResolver
   // let oracle: Oracle
   let fetcher: InvolicaFetcher
@@ -71,7 +71,7 @@ describe('Involica Fetcher', function () {
       // defaultGelatoFee,
       // wethSwapRoute,
       btcSwapRoute,
-      // involica,
+      involica,
       // resolver,
       // oracle,
       fetcher,
@@ -92,8 +92,11 @@ describe('Involica Fetcher', function () {
     it('Fetching should not fail if zeroAddress passed in', async () => {
       await fetcher.fetchUserData(ethers.constants.AddressZero)
     })
+    it('Fetching single token should succeed', async () => {
+      await involica.fetchAllowedToken(0)
+    })
     it('Fetched prices should be correct', async () => {
-      const { tokens, decimals, prices } = await fetcher.fetchTokensData()
+      const tokens = await fetcher.fetchTokensData()
 
       // const tokensAndPrices = zip(
       //   ['wFTM', 'USDC', 'wBTC'],
@@ -105,17 +108,17 @@ describe('Involica Fetcher', function () {
       //   tokensAndPrices,
       // })
 
-      expect(tokens[0]).to.eq(weth.address)
-      expect(tokens[1]).to.eq(usdc.address)
-      expect(tokens[2]).to.eq(wbtc.address)
+      expect(tokens[0].token).to.eq(weth.address)
+      expect(tokens[1].token).to.eq(usdc.address)
+      expect(tokens[2].token).to.eq(wbtc.address)
 
-      expect(decimals[0]).to.eq(18)
-      expect(decimals[1]).to.eq(6)
-      expect(decimals[2]).to.eq(8)
+      expect(tokens[0].decimals).to.eq(18)
+      expect(tokens[1].decimals).to.eq(6)
+      expect(tokens[2].decimals).to.eq(8)
 
-      expect(prices[0]).to.be.lt(prices[1])
-      expect(prices[1]).to.eq(1000000)
-      expect(prices[2]).to.be.gt(prices[1])
+      expect(tokens[0].price).to.be.lt(tokens[1].price)
+      expect(tokens[1].price).to.eq(1000000)
+      expect(tokens[2].price).to.be.gt(tokens[1].price)
     })
   })
   it('Fetching routes succeeds', async () => {

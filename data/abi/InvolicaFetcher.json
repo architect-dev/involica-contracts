@@ -44,19 +44,26 @@
     "name": "fetchTokensData",
     "outputs": [
       {
-        "internalType": "address[]",
-        "name": "tokens",
-        "type": "address[]"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "decimals",
-        "type": "uint256[]"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "prices",
-        "type": "uint256[]"
+        "components": [
+          {
+            "internalType": "address",
+            "name": "token",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "decimals",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "price",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct InvolicaFetcher.TokenData[]",
+        "name": "tokensData",
+        "type": "tuple[]"
       }
     ],
     "stateMutability": "view",

@@ -14,22 +14,27 @@ contract InvolicaFetcher {
         oracle = Oracle(_oracle);
     }
 
+    struct TokenData {
+        address token;
+        uint256 decimals;
+        uint256 price;
+    }
     function fetchTokensData()
         public
         view
-        returns (
-            address[] memory tokens,
-            uint256[] memory decimals,
-            uint256[] memory prices
-        )
+        returns ( TokenData[] memory tokensData )
     {
-        tokens = involica.fetchAllowedTokens();
-        prices = new uint256[](tokens.length);
-        decimals = new uint256[](tokens.length);
-        for (uint256 i = 0; i < tokens.length; i++) {
-            (prices[i],) = oracle.getPriceUsdc(tokens[i]);
-            decimals[i] = IERC20Ext(tokens[i]).decimals();
+        address[] memory allowedTokens = involica.fetchAllowedTokens();
+        tokensData = new TokenData[](allowedTokens.length + 1);
+
+        for (uint256 i = 0; i < (tokensData.length - 1); i++) {
+            tokensData[i].token = allowedTokens[i];
+            tokensData[i].decimals = IERC20Ext(allowedTokens[i]).decimals();
+            (tokensData[i].price,) = oracle.getPriceUsdc(allowedTokens[i]);
         }
+        tokensData[tokensData.length - 1].token = involica.NATIVE_TOKEN();
+        tokensData[tokensData.length - 1].decimals = 18;
+        (tokensData[tokensData.length - 1].price,) = oracle.getPriceUsdc(involica.NATIVE_TOKEN());
     }
 
     function fetchUserData(address _user)
@@ -60,12 +65,13 @@ contract InvolicaFetcher {
             dcasRemaining = position.amountDCA > 0 ? limitedValue / position.amountDCA : 0;
         }
 
-        userTokensData = new IInvolica.UserTokenData[](involica.fetchAllowedTokens().length + 1);
+        address[] memory allowedTokens = involica.fetchAllowedTokens();
+        userTokensData = new IInvolica.UserTokenData[](allowedTokens.length + 1);
         for (uint256 i = 0; i < (userTokensData.length - 1); i++) {
             userTokensData[i] = IInvolica.UserTokenData({
-                token: involica.fetchAllowedToken(i),
-                allowance: IERC20(involica.fetchAllowedToken(i)).allowance(_user, address(this)),
-                balance: IERC20(involica.fetchAllowedToken(i)).balanceOf(_user)
+                token: allowedTokens[i],
+                allowance: IERC20(allowedTokens[i]).allowance(_user, address(this)),
+                balance: IERC20(allowedTokens[i]).balanceOf(_user)
             });
         }
         userTokensData[userTokensData.length - 1] = IInvolica.UserTokenData({
