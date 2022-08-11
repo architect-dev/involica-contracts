@@ -15,7 +15,10 @@
     "lint:prettier:scripts:fix": "prettier --write 'scripts/**/*.ts'",
     "prepare": "husky install",
     "size": "npx hardhat size-contracts",
-    "deploy:fantom": "npx hardhat --network fantom run scripts/deploy.ts"
+    "deploy:ftm": "npx hardhat --network fantom run scripts/deploy.ts",
+    "deploySetResolver:ftm": "npx hardhat --network fantom run scripts/deploySetResolver.ts",
+    "deployOracleFetcher:ftm": "npx hardhat --network fantom run scripts/deployOracleFetcher.ts",
+    "syncTokens:ftm": "npx hardhat --network fantom run scripts/syncTokens.ts"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",
@@ -75,5 +78,8 @@
     "hooks": {
       "pre-commit": "lint-staged"
     }
+  },
+  "dependencies": {
+    "hardhat-abi-exporter": "^2.10.0"
   }
 }

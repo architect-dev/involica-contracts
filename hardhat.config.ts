@@ -7,6 +7,7 @@ import '@nomiclabs/hardhat-ethers'
 import '@nomiclabs/hardhat-waffle'
 import 'hardhat-gas-reporter'
 import 'solidity-coverage'
+import 'hardhat-abi-exporter'
 import 'hardhat-contract-sizer'
 
 import { HardhatUserConfig } from 'hardhat/types'
@@ -63,6 +64,14 @@ const config: HardhatUserConfig = {
   typechain: {
     outDir: 'typechain',
     target: 'ethers-v5',
+  },
+  abiExporter: {
+    path: './data/abi',
+    runOnCompile: true,
+    clear: false,
+    flat: true,
+    only: [':ERC20$', ':Involica$', ':InvolicaFetcher$'],
+    spacing: 2,
   },
   mocha: {
     timeout: 0,

@@ -1,0 +1,23 @@
+{
+  "involica": {
+    "250": "0xB28783eD5917Fca44AdcdA11520266EDe4D7698A"
+  },
+  "fetcher": {
+    "250": "0x6B01AaD7583ed5acE4FCf3067fcA5544EB5891E3"
+  },
+  "oracle": {
+    "250": "0xD4e4219A4B95a90D0BE89246664F0a3d3E6a65ce"
+  },
+  "resolver": {
+    "250": "0xdeE10487cf51E8bB25aE912caBA338E599E9352A"
+  },
+  "usdc": {
+    "250": "0x04068DA6C83AFCFA0e13ba15A6696662335D5B75"
+  },
+  "weth": {
+    "250": "0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83"
+  },
+  "multicall": {
+    "250": "0xb828c456600857abd4ed6c32facc607bd0464f4f"
+  }
+}

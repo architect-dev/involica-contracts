@@ -7,6 +7,7 @@ interface IInvolica {
     struct Position {
         address user;
         address tokenIn;
+        address[] tokenInPriceRoute;
         PositionOut[] outs;
         uint256 amountDCA;
         uint256 intervalDCA;
@@ -18,7 +19,6 @@ interface IInvolica {
     struct PositionOut {
         address token;
         uint256 weight;
-        address[] route;
         uint256 maxSlippage;
     }
 
@@ -36,6 +36,7 @@ interface IInvolica {
     }
     struct UserTokenTx {
         address tokenIn;
+        uint256 tokenInPrice;
         address tokenOut;
         uint256 amountIn;
         uint256 amountOut;
@@ -69,6 +70,7 @@ interface IInvolica {
         address indexed user,
         address indexed tokenIn,
         uint256 indexed inAmount,
+        uint256 inPrice,
         address[] outTokens,
         uint256[] outAmounts,
         uint256 involicaTxFee
@@ -82,19 +84,17 @@ interface IInvolica {
     event SetBlacklistedPair(address indexed tokenA, address indexed tokenB, bool indexed blacklisted);
     event MinSlippageSet(uint256 indexed minSlippage);
 
-    // Callable
-    function executeDCA(address, uint256[] calldata) external;
-
     // Public
+    function NATIVE_TOKEN() external view returns (address);
+    function fetchUniRouter() external view returns (address);
     function fetchAllowedTokens() external view returns (address[] memory);
-
     function fetchAllowedToken(uint256 i) external view returns (address);
-
     function fetchUserTreasury(address user) external view returns (uint256);
-
     function fetchUserPosition(address user) external view returns (Position memory);
-
     function fetchUserTxs(address user) external view returns (UserTx[] memory);
+
+    // Callable
+    function executeDCA(address, uint256 tokenInPrice, address[][] calldata swapsRoutes, uint256[] calldata swapsAmountOutMin) external;
 }
 
 interface IInvolicaResolver {

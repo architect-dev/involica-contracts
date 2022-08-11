@@ -1,15 +1,7 @@
 /* eslint-disable no-console */
 import hre from 'hardhat'
-import { OPS_ADDRESS, ROUTER_ADDRESS, WETH_ADDRESS } from '../constants'
-
-// eslint-disable-next-line @typescript-eslint/ban-types
-export const failableVerify = async (args: Object): Promise<void> => {
-  try {
-    await hre.run('verify:verify', args)
-  } catch (err: any) {
-    console.log('Verify Failed: ', err.message)
-  }
-}
+import { OPS_ADDRESS, ROUTER_ADDRESS, USDC_ADDRESS, WNATIVE_ADDRESS } from '../constants'
+import { failableVerify, writeContractAddresses } from '../test/utils'
 
 async function main() {
   const [signer] = await hre.ethers.getSigners()
@@ -19,7 +11,12 @@ async function main() {
   // DEPLOY INVOLICA
   const InvolicaFactory = await hre.ethers.getContractFactory('Involica', signer)
 
-  const involicaConstructorArgs = [signer, OPS_ADDRESS[chainId], ROUTER_ADDRESS[chainId], WETH_ADDRESS[chainId]]
+  const involicaConstructorArgs = [
+    signer.address,
+    OPS_ADDRESS[chainId],
+    ROUTER_ADDRESS[chainId],
+    WNATIVE_ADDRESS[chainId],
+  ]
   const involica = await InvolicaFactory.deploy(...involicaConstructorArgs)
   await involica.deployed()
   console.log('Involica deployed to:', involica.address)
@@ -30,10 +27,24 @@ async function main() {
     constructorArguments: involicaConstructorArgs,
   })
 
+  // ORACLE
+  const InvolicaOracleFactory = await hre.ethers.getContractFactory('Oracle', signer)
+
+  const oracleConstructorArgs = [ROUTER_ADDRESS[chainId], WNATIVE_ADDRESS[chainId], USDC_ADDRESS[chainId]]
+  const oracle = await InvolicaOracleFactory.deploy(...oracleConstructorArgs)
+  await oracle.deployed()
+  console.log('Oracle deployed to:', oracle.address)
+
+  // VERIFY ORACLE
+  await failableVerify({
+    address: oracle.address,
+    constructorArguments: oracleConstructorArgs,
+  })
+
   // DEPLOY RESOLVER
   const InvolicaResolverFactory = await hre.ethers.getContractFactory('InvolicaResolver', signer)
 
-  const resolverConstructorArgs = [involica.address, ROUTER_ADDRESS[chainId]]
+  const resolverConstructorArgs = [involica.address, ROUTER_ADDRESS[chainId], oracle.address]
   const resolver = await InvolicaResolverFactory.deploy(...resolverConstructorArgs)
   await resolver.deployed()
   console.log('Resolver deployed to:', resolver.address)
@@ -45,8 +56,33 @@ async function main() {
   })
 
   // SET RESOLVER
-  await involica.setResolver(resolver.address)
+  const setResolverTx = await involica.setResolver(resolver.address)
+  await setResolverTx.wait()
   console.log('Involica resolver set:', resolver.address)
+
+  // FETCHER
+  const InvolicaFetcherFactory = await hre.ethers.getContractFactory('InvolicaFetcher', signer)
+
+  const fetcherConstructorArgs = [involica.address, oracle.address]
+  const fetcher = await InvolicaFetcherFactory.deploy(...fetcherConstructorArgs)
+  await fetcher.deployed()
+  console.log('Fetcher deployed to:', fetcher.address)
+
+  // VERIFY FETCHER
+  await failableVerify({
+    address: fetcher.address,
+    constructorArguments: fetcherConstructorArgs,
+  })
+
+  // WRITE CONTRACT ADDRESSES
+  writeContractAddresses(chainId, [
+    ['involica', involica.address],
+    ['fetcher', fetcher.address],
+    ['oracle', oracle.address],
+    ['resolver', resolver.address],
+    ['usdc', USDC_ADDRESS[chainId]],
+    ['weth', WNATIVE_ADDRESS[chainId]],
+  ])
 }
 
 // We recommend this pattern to be able to use async/await everywhere

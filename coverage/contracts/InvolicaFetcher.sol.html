@@ -22,7 +22,7 @@
       <div class='fl pad1y space-right2'>
         <span class="strong">100% </span>
         <span class="quiet">Statements</span>
-        <span class='fraction'>19/19</span>
+        <span class='fraction'>26/26</span>
       </div>
       <div class='fl pad1y space-right2'>
         <span class="strong">100% </span>
@@ -37,7 +37,7 @@
       <div class='fl pad1y space-right2'>
         <span class="strong">100% </span>
         <span class="quiet">Lines</span>
-        <span class='fraction'>19/19</span>
+        <span class='fraction'>26/26</span>
       </div>
     </div>
   </div>
@@ -117,7 +117,24 @@
 72
 73
 74
-75</td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92</td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -163,27 +180,44 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">53×</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">53×</span>
+<span class="cline-any cline-yes">54×</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">53×</span>
+<span class="cline-any cline-yes">54×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">54×</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">53×</span>
+<span class="cline-any cline-yes">54×</span>
 <span class="cline-any cline-yes">47×</span>
 <span class="cline-any cline-yes">47×</span>
 <span class="cline-any cline-yes">47×</span>
 <span class="cline-any cline-yes">47×</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">53×</span>
-<span class="cline-any cline-yes">53×</span>
-<span class="cline-any cline-yes">159×</span>
+<span class="cline-any cline-yes">54×</span>
+<span class="cline-any cline-yes">54×</span>
+<span class="cline-any cline-yes">162×</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">54×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">54×</span>
+<span class="cline-any cline-yes">54×</span>
+<span class="cline-any cline-yes">54×</span>
+<span class="cline-any cline-yes">54×</span>
+<span class="cline-any cline-yes">54×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">54×</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -234,14 +268,15 @@ contract InvolicaFetcher {
             uint256 allowance,
             uint256 balance,
             uint256 dcasRemaining,
-            IInvolica.UserTokenData[] memory userTokensData
+            IInvolica.UserTokenData[] memory userTokensData,
+            uint256[] memory swapsAmountOutMin
         )
     {
         userTreasury = involica.fetchUserTreasury(_user);
 &nbsp;
         position = involica.fetchUserPosition(_user);
 &nbsp;
-        userHasPosition = position.user == _user;
+        userHasPosition = position.user == _user &amp;&amp; _user != address(0);
 &nbsp;
         // Fetch wallet allowance and balance
         if (userHasPosition) {
@@ -251,13 +286,29 @@ contract InvolicaFetcher {
             dcasRemaining = position.amountDCA &gt; 0 ? limitedValue / position.amountDCA : 0;
         }
 &nbsp;
-        userTokensData = new IInvolica.UserTokenData[](involica.fetchAllowedTokens().length);
-        for (uint256 i = 0; i &lt; userTokensData.length; i++) {
+        userTokensData = new IInvolica.UserTokenData[](involica.fetchAllowedTokens().length + 1);
+        for (uint256 i = 0; i &lt; (userTokensData.length - 1); i++) {
             userTokensData[i] = IInvolica.UserTokenData({
                 token: involica.fetchAllowedToken(i),
                 allowance: IERC20(involica.fetchAllowedToken(i)).allowance(_user, address(this)),
                 balance: IERC20(involica.fetchAllowedToken(i)).balanceOf(_user)
             });
+        }
+        userTokensData[userTokensData.length - 1] = IInvolica.UserTokenData({
+            token: involica.NATIVE_TOKEN(),
+            allowance: type(uint256).max,
+            balance: _user.balance
+        });
+        
+        uint256[] memory amounts;
+        swapsAmountOutMin = new uint256[](position.outs.length);
+        for (uint256 i = 0; i &lt; position.outs.length; i++) {
+            address[] memory route = oracle.getRoute(position.tokenIn, position.outs[i].token);
+            amounts = IUniswapV2Router(involica.fetchUniRouter()).getAmountsOut(
+                position.amountDCA * position.outs[i].weight / 10_000,
+                route
+            );
+            swapsAmountOutMin[i] = amounts[amounts.length - 1] * (10_000 - position.outs[i].maxSlippage) / 10_000;
         }
     }
 &nbsp;
@@ -271,7 +322,7 @@ contract InvolicaFetcher {
 </div><!-- /wrapper -->
 <div class='footer quiet pad2 space-top1 center small'>
   Code coverage
-  generated by <a href="http://istanbul-js.org/" target="_blank">istanbul</a> at Fri Aug 05 2022 15:25:55 GMT+0200 (Central European Summer Time)
+  generated by <a href="http://istanbul-js.org/" target="_blank">istanbul</a> at Thu Aug 11 2022 17:36:06 GMT+0200 (Central European Summer Time)
 </div>
 </div>
 <script src="../prettify.js"></script>

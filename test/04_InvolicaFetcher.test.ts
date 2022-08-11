@@ -89,8 +89,11 @@ describe('Involica Fetcher', function () {
   })
 
   describe('fetchTokensData()', async () => {
+    it('Fetching should not fail if zeroAddress passed in', async () => {
+      await fetcher.fetchUserData(ethers.constants.AddressZero)
+    })
     it('Fetched prices should be correct', async () => {
-      const { tokens, prices } = await fetcher.fetchTokensData()
+      const { tokens, decimals, prices } = await fetcher.fetchTokensData()
 
       // const tokensAndPrices = zip(
       //   ['wFTM', 'USDC', 'wBTC'],
@@ -106,22 +109,13 @@ describe('Involica Fetcher', function () {
       expect(tokens[1]).to.eq(usdc.address)
       expect(tokens[2]).to.eq(wbtc.address)
 
+      expect(decimals[0]).to.eq(18)
+      expect(decimals[1]).to.eq(6)
+      expect(decimals[2]).to.eq(8)
+
       expect(prices[0]).to.be.lt(prices[1])
       expect(prices[1]).to.eq(1000000)
       expect(prices[2]).to.be.gt(prices[1])
-    })
-    it('Fetched routes should be correct', async () => {
-      const { routes } = await fetcher.fetchTokensData()
-
-      // const tokensAndRoutes = zip(['wFTM', 'USDC', 'wBTC'], routes.map(routify))
-
-      // console.log({
-      //   tokensAndRoutes,
-      // })
-
-      expectRoutesMatch(routes[0], [weth.address, usdc.address])
-      expectRoutesMatch(routes[1], [])
-      expectRoutesMatch(routes[2], [wbtc.address, weth.address, usdc.address])
     })
   })
   it('Fetching routes succeeds', async () => {

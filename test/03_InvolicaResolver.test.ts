@@ -99,13 +99,11 @@ describe('Involica Resolver', function () {
           {
             token: weth.address,
             weight: 5000,
-            route: wethSwapRoute,
             maxSlippage: defaultSlippage,
           },
           {
             token: wbtc.address,
             weight: 5000,
-            route: btcSwapRoute,
             maxSlippage: defaultSlippage,
           },
         ],
@@ -123,7 +121,7 @@ describe('Involica Resolver', function () {
       expect(toUtf8String(payload)).to.be.eq('User doesnt have a position')
     })
     it('should return false if user position not mature', async () => {
-      await involica.connect(opsSigner).executeDCA(alice.address, [0, 0])
+      await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute, btcSwapRoute], [0, 0])
 
       const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)
       expect(canExec).to.be.eq(false)
@@ -158,6 +156,8 @@ describe('Involica Resolver', function () {
 
       const taskData = involica.interface.encodeFunctionData('executeDCA', [
         alice.address,
+        1e6,
+        [wethSwapRoute, btcSwapRoute],
         [wethAmountOutMin, wbtcAmountOutMin],
       ])
 
@@ -179,6 +179,8 @@ describe('Involica Resolver', function () {
 
       const taskData = involica.interface.encodeFunctionData('executeDCA', [
         alice.address,
+        1e6,
+        [wethSwapRoute, btcSwapRoute],
         [wethAmountOutMin, wbtcAmountOutMin],
       ])
 

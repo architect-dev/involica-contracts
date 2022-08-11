@@ -1,5 +1,5 @@
 import { BigNumber, BigNumberish, Contract } from 'ethers/lib/ethers'
-import { ethers, network } from 'hardhat'
+import { ethers, network, run } from 'hardhat'
 import {
   OPS_ADDRESS,
   ROUTER_ADDRESS,
@@ -7,7 +7,7 @@ import {
   USDC_DECIMALS,
   USDC_OWNING_WALLET,
   WBTC_ADDRESS,
-  WETH_ADDRESS,
+  WNATIVE_ADDRESS,
 } from '../constants'
 import {
   IERC20,
@@ -23,6 +23,7 @@ import {
 } from '../typechain'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
 import { parseEther, parseUnits } from 'ethers/lib/utils'
+import fs from 'fs'
 
 export interface ThisObject {
   chainId: number
@@ -80,7 +81,7 @@ export const prepare = async (chainId: number): Promise<ThisObject> => {
 
   // Tokens
   thisObject.usdc = <IERC20>await ethers.getContractAt('IERC20', USDC_ADDRESS[chainId])
-  thisObject.weth = <IERC20>await ethers.getContractAt('IERC20', WETH_ADDRESS[chainId])
+  thisObject.weth = <IERC20>await ethers.getContractAt('IERC20', WNATIVE_ADDRESS[chainId])
   thisObject.wbtc = <IERC20>await ethers.getContractAt('IERC20', WBTC_ADDRESS[chainId])
 
   // Default Values
@@ -114,15 +115,6 @@ export const prepare = async (chainId: number): Promise<ThisObject> => {
   // Fund involica so that it can cover funds if user cant
   await fund(thisObject.involica.address)
 
-  // Contract:Resolver
-  const InvolicaResolverFactory = (await ethers.getContractFactory(
-    'InvolicaResolver',
-    thisObject.deployer,
-  )) as InvolicaResolver__factory
-  thisObject.resolver = await InvolicaResolverFactory.deploy(thisObject.involica.address, ROUTER_ADDRESS[chainId])
-  await thisObject.resolver.deployed()
-  await thisObject.involica.connect(thisObject.deployer).setResolver(thisObject.resolver.address)
-
   // Contract:Oracle
   const OracleFactory = (await ethers.getContractFactory('Oracle', thisObject.deployer)) as Oracle__factory
   thisObject.oracle = await OracleFactory.deploy(
@@ -130,6 +122,19 @@ export const prepare = async (chainId: number): Promise<ThisObject> => {
     thisObject.weth.address,
     thisObject.usdc.address,
   )
+
+  // Contract:Resolver
+  const InvolicaResolverFactory = (await ethers.getContractFactory(
+    'InvolicaResolver',
+    thisObject.deployer,
+  )) as InvolicaResolver__factory
+  thisObject.resolver = await InvolicaResolverFactory.deploy(
+    thisObject.involica.address,
+    ROUTER_ADDRESS[chainId],
+    thisObject.oracle.address,
+  )
+  await thisObject.resolver.deployed()
+  await thisObject.involica.connect(thisObject.deployer).setResolver(thisObject.resolver.address)
 
   // Contract:Fetcher
   const InvolicaFetcherFactory = (await ethers.getContractFactory(
@@ -226,3 +231,36 @@ export const fund = async (address: string): Promise<void> => {
 export const ONE_ETH = parseEther('1')
 
 export const parseGwei = (value: BigNumberish): BigNumber => BigNumber.from(value).mul(1000000000)
+
+export const writeContractAddresses = (chainId: number, addresses: Array<[string, string]>): void => {
+  const contractsJSON = fs.readFileSync('./data/contracts.json')
+  const contracts = JSON.parse(contractsJSON.toString())
+
+  const insertAddress = (key: string, value: string) => {
+    if (!contracts[key]) contracts[key] = {}
+    contracts[key][chainId] = value
+  }
+
+  addresses.map(([name, address]) => {
+    insertAddress(name, address)
+  })
+
+  const output = JSON.stringify(contracts, null, 2)
+  fs.writeFileSync('./data/contracts.json', output)
+}
+
+export const readContractAddresses = (chainId: number, contractNames: string[]): string[] => {
+  const contractsJSON = fs.readFileSync('./data/contracts.json')
+  const contracts = JSON.parse(contractsJSON.toString())
+  return contractNames.map((contractName) => contracts[contractName][chainId])
+}
+
+// eslint-disable-next-line @typescript-eslint/ban-types
+export const failableVerify = async (args: Object): Promise<void> => {
+  return
+  try {
+    await run('verify:verify', args)
+  } catch (err: any) {
+    console.log('Verify Failed: ', err.message)
+  }
+}

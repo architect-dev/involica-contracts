@@ -97,7 +97,6 @@ describe('Integration Test: Gelato DCA', function () {
           {
             token: weth.address,
             weight: 10000,
-            route: wethSwapRoute,
             maxSlippage: defaultSlippage,
           },
         ],
@@ -167,7 +166,6 @@ describe('Integration Test: Gelato DCA', function () {
           {
             token: weth.address,
             weight: 10000,
-            route: wethSwapRoute,
             maxSlippage: defaultSlippage,
           },
         ],
@@ -211,7 +209,6 @@ describe('Integration Test: Gelato DCA', function () {
           {
             token: weth.address,
             weight: 10000,
-            route: wethSwapRoute,
             maxSlippage: defaultSlippage,
           },
         ],
@@ -282,7 +279,6 @@ describe('Integration Test: Gelato DCA', function () {
           {
             token: weth.address,
             weight: 10000,
-            route: wethSwapRoute,
             maxSlippage: defaultSlippage,
           },
         ],
@@ -324,7 +320,6 @@ describe('Integration Test: Gelato DCA', function () {
           {
             token: weth.address,
             weight: 10000,
-            route: wethSwapRoute,
             maxSlippage: defaultSlippage,
           },
         ],
@@ -387,7 +382,6 @@ describe('Integration Test: Gelato DCA', function () {
           {
             token: weth.address,
             weight: 10000,
-            route: wethSwapRoute,
             maxSlippage: defaultSlippage,
           },
         ],

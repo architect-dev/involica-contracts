@@ -3,16 +3,19 @@ pragma solidity 0.8.12;
 
 import {IInvolica, IInvolicaResolver} from "./interfaces/IInvolica.sol";
 import {IUniswapV2Router} from "./interfaces/IUniswapV2Router.sol";
+import "./Oracle.sol";
 
 contract InvolicaResolver is IInvolicaResolver {
     IInvolica public involica;
     IUniswapV2Router public uniRouter;
+    Oracle public oracle;
 
     address public owner;
 
-    constructor(address _involica, address _uniRouter) {
+    constructor(address _involica, address _uniRouter, address _oracle) {
         involica = IInvolica(_involica);
         uniRouter = IUniswapV2Router(_uniRouter);
+        oracle = Oracle(_oracle);
         owner = msg.sender;
     }
 
@@ -29,12 +32,16 @@ contract InvolicaResolver is IInvolicaResolver {
         if (position.maxGasPrice > 0 && tx.gasprice > position.maxGasPrice) return (false, bytes("Gas too expensive"));
         canExec = true;
 
+        (uint256 tokenInPrice,) = oracle.getPriceUsdc(position.tokenIn);
+
+        address[][] memory swapsRoutes = new address[][](position.outs.length);
         uint256[] memory amounts;
         uint256[] memory swapsAmountOutMin = new uint256[](position.outs.length);
         for (uint256 i = 0; i < position.outs.length; i++) {
+            swapsRoutes[i] = oracle.getRoute(position.tokenIn, position.outs[i].token);
             amounts = uniRouter.getAmountsOut(
                 position.amountDCA * position.outs[i].weight / 10_000,
-                position.outs[i].route
+                swapsRoutes[i]
             );
             swapsAmountOutMin[i] = amounts[amounts.length - 1] * (10_000 - position.outs[i].maxSlippage) / 10_000;
         }
@@ -42,6 +49,8 @@ contract InvolicaResolver is IInvolicaResolver {
         execPayload = abi.encodeWithSelector(
             IInvolica.executeDCA.selector,
             _user,
+            tokenInPrice,
+            swapsRoutes,
             swapsAmountOutMin
         );
     }

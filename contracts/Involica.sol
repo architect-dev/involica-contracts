@@ -52,11 +52,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     address public involicaTreasury;
 
     IUniswapV2Router public immutable uniRouter;
-    address public constant NATIVE_TOKEN = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address public constant override NATIVE_TOKEN = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public immutable weth;
-
-    uint256 activeTxAmountSwapped = 0;
-    uint256 activeTxFeeTaken = 0;
 
     receive() external payable {}
 
@@ -89,12 +86,13 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     function _validRoute(
         address _tokenIn,
-        uint256 _amountIn,
         address _out,
-        PositionOut memory _tokenOut
+        uint256 _amount,
+        uint256 _weight,
+        address[] memory _route
     ) internal view returns (bool) {
-        if (_tokenIn != _tokenOut.route[0] || _out != _tokenOut.route[_tokenOut.route.length - 1]) return false;
-        try uniRouter.getAmountsOut((_amountIn * _tokenOut.weight) / 10_000, _tokenOut.route) {
+        if (_tokenIn != _route[0] || _out != _route[_route.length - 1]) return false;
+        try uniRouter.getAmountsOut((_amount * _weight) / 10_000, _route) {
             return true;
         } catch {
             return false;
@@ -169,13 +167,11 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             require(!blacklistedPairs[_tokenIn][out], 'Pair is blacklisted');
             require(_outs[i].maxSlippage >= minSlippage, 'Invalid slippage');
             require(_outs[i].weight > 0, 'Non zero weight');
-            require(_validRoute(_tokenIn, position.amountDCA, out, _outs[i]), 'Invalid route');
             weightsSum += _outs[i].weight;
             position.outs.push(
                 PositionOut({
                     token: out,
                     weight: _outs[i].weight,
-                    route: _outs[i].route,
                     maxSlippage: _outs[i].maxSlippage
                 })
             );
@@ -286,7 +282,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     // DCA EXECUTION
 
-    function executeDCA(address _user, uint256[] calldata swapsAmountOutMin)
+    function executeDCA(address _user, uint256 tokenInPrice, address[][] calldata swapsRoutes, uint256[] calldata swapsAmountOutMin)
         public
         override
         whenNotPaused
@@ -295,12 +291,13 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         require(msg.sender == ops || msg.sender == _user, 'Only GelatoOps or User can Execute DCA');
 
         Position storage position = positions[_user];
-        require(position.user == _user, 'User doesnt have a position');
-        require(block.timestamp >= position.lastDCA + position.intervalDCA, 'DCA not mature');
+        require(position.user == _user && _user != address(0), 'User doesnt have a position');
+        require(msg.sender == _user || block.timestamp >= position.lastDCA + position.intervalDCA, 'DCA not mature');
         position.lastDCA = block.timestamp;
 
         // Validate extraData length
-        require(position.outs.length == swapsAmountOutMin.length, 'Invalid extra data');
+        require(position.outs.length == swapsRoutes.length, 'Routes for swaps is invalid');
+        require(position.outs.length == swapsAmountOutMin.length, 'AmountOut for swaps is invalid');
 
         (uint256 fee, ) = IOps(ops).getFeeDetails();
         _transfer(fee, NATIVE_TOKEN);
@@ -317,19 +314,21 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         _setupDCA(position);
 
         // Perform swaps
-        _executeDCASwaps(position, swapsAmountOutMin);
+        _executeDCASwaps(position, tokenInPrice, swapsRoutes, swapsAmountOutMin);
 
         // Send unused in and all swapped outs back to users wallet
-        _finalizeDCA(position);
+        _finalizeDCA(position, tokenInPrice);
     }
 
+    uint256 activeTxAmountSwapped = 0;
+    uint256 activeTxFeeTaken = 0;
     function _setupDCA(Position storage position) internal {
         IERC20(position.tokenIn).safeTransferFrom(position.user, address(this), position.amountDCA);
         activeTxAmountSwapped = 0;
         activeTxFeeTaken = 0;
     }
 
-    function _executeDCASwaps(Position storage position, uint256[] memory swapsAmountOutMin) internal {
+    function _executeDCASwaps(Position storage position, uint256 tokenInPrice, address[][] memory swapsRoutes, uint256[] memory swapsAmountOutMin) internal {
         // Approve swap in amount
         IERC20(position.tokenIn).approve(address(uniRouter), position.amountDCA);
 
@@ -342,34 +341,40 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         // Execute individual token swaps
         uint256[] memory amounts;
         bool validPair;
+        bool validRoute;
         string memory swapErrReason;
         bool swapErr;
         for (uint256 i = 0; i < position.outs.length; i++) {
             validPair = _validPair(position.tokenIn, position.outs[i].token);
+            validRoute = _validRoute(position.tokenIn, position.outs[i].token, position.amountDCA, position.outs[i].weight, swapsRoutes[i]);
 
-            if (!validPair) {
+
+            if (!validPair || !validRoute) {
                 userTx.tokenTxs.push(
                     UserTokenTx({
                         tokenIn: position.tokenIn,
+                        tokenInPrice: tokenInPrice,
                         tokenOut: position.outs[i].token,
                         amountIn: 0,
                         amountOut: 0,
-                        err: 'Invalid pair'
+                        err: !validPair ? 'Invalid pair' : 'Invalid route'
                     })
                 );
                 continue;
             }
 
+
             (amounts, swapErr, swapErrReason) = _swap(
                 (position.amountDCA * position.outs[i].weight * (10_000 - txFee)) / (10_000 * 10_000),
                 swapsAmountOutMin[i],
-                position.outs[i].route
+                swapsRoutes[i]
             );
 
             if (swapErr) {
                 userTx.tokenTxs.push(
                     UserTokenTx({
                         tokenIn: position.tokenIn,
+                        tokenInPrice: tokenInPrice,
                         tokenOut: position.outs[i].token,
                         amountIn: 0,
                         amountOut: 0,
@@ -385,6 +390,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             userTx.tokenTxs.push(
                 UserTokenTx({
                     tokenIn: position.tokenIn,
+                    tokenInPrice: tokenInPrice,
                     tokenOut: position.outs[i].token,
                     amountIn: amounts[0],
                     amountOut: amounts[amounts.length - 1],
@@ -417,7 +423,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         }
     }
 
-    function _finalizeDCA(Position storage position) internal {
+    function _finalizeDCA(Position storage position, uint256 tokenInPrice) internal {
         UserTx storage userTx = userTxs[position.user][userTxs[position.user].length - 1];
 
         // Transfer swap out tokens to user's wallet, populate 
@@ -442,7 +448,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             IERC20(position.tokenIn).safeTransfer(position.user, position.amountDCA - (activeTxAmountSwapped + activeTxFeeTaken));
         }
 
-        emit FinalizeDCA(position.user, position.tokenIn, activeTxAmountSwapped, tokens, amounts, activeTxFeeTaken);
+        emit FinalizeDCA(position.user, position.tokenIn, tokenInPrice, activeTxAmountSwapped, tokens, amounts, activeTxFeeTaken);
     }
 
     // ADMINISTRATION
@@ -512,6 +518,10 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     // PUBLIC
 
+    function fetchUniRouter() public view override returns (address) {
+        return address(uniRouter);
+    }
+    
     function fetchAllowedTokens() public view override returns (address[] memory) {
         return allowedTokens.values();
     }
