@@ -70,7 +70,7 @@ contract InvolicaFetcher {
         for (uint256 i = 0; i < (userTokensData.length - 1); i++) {
             userTokensData[i] = IInvolica.UserTokenData({
                 token: allowedTokens[i],
-                allowance: IERC20(allowedTokens[i]).allowance(_user, address(this)),
+                allowance: IERC20(allowedTokens[i]).allowance(_user, address(involica)),
                 balance: IERC20(allowedTokens[i]).balanceOf(_user)
             });
         }

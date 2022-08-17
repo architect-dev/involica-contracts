@@ -69,11 +69,17 @@
       {
         "indexed": true,
         "internalType": "address",
-        "name": "tokenIn",
+        "name": "recipient",
         "type": "address"
       },
       {
         "indexed": true,
+        "internalType": "address",
+        "name": "tokenIn",
+        "type": "address"
+      },
+      {
+        "indexed": false,
         "internalType": "uint256",
         "name": "inAmount",
         "type": "uint256"
@@ -94,6 +100,12 @@
         "indexed": false,
         "internalType": "uint256[]",
         "name": "outAmounts",
+        "type": "uint256[]"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256[]",
+        "name": "outPrices",
         "type": "uint256[]"
       },
       {
@@ -325,6 +337,12 @@
         "type": "address"
       },
       {
+        "indexed": true,
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
         "indexed": false,
         "internalType": "address",
         "name": "tokenIn",
@@ -498,6 +516,11 @@
         "internalType": "uint256[]",
         "name": "swapsAmountOutMin",
         "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "outPrices",
+        "type": "uint256[]"
       }
     ],
     "name": "executeDCA",
@@ -635,6 +658,11 @@
             "internalType": "string",
             "name": "finalizationReason",
             "type": "string"
+          },
+          {
+            "internalType": "address",
+            "name": "recipient",
+            "type": "address"
           }
         ],
         "internalType": "struct IInvolica.Position",
@@ -864,13 +892,24 @@
         "internalType": "string",
         "name": "finalizationReason",
         "type": "string"
+      },
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
     "type": "function"
   },
   {
-    "inputs": [],
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "_executeImmediately",
+        "type": "bool"
+      }
+    ],
     "name": "reInitPosition",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -988,6 +1027,11 @@
     "inputs": [
       {
         "internalType": "address",
+        "name": "_recipient",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
         "name": "_tokenIn",
         "type": "address"
       },
@@ -1027,11 +1071,16 @@
         "internalType": "uint256",
         "name": "_maxGasPrice",
         "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "_executeImmediately",
+        "type": "bool"
       }
     ],
     "name": "setPosition",
     "outputs": [],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

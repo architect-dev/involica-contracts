@@ -34,7 +34,7 @@ describe('Integration Test: Gelato DCA', function () {
   let defaultGasPrice: BigNumberish
   let defaultInterval: BigNumberish
   let defaultGelatoFee: BigNumber
-  let wethSwapRoute: string[]
+  // let wethSwapRoute: string[]
   // let btcSwapRoute: string[]
 
   let involica: Involica
@@ -69,7 +69,7 @@ describe('Integration Test: Gelato DCA', function () {
       defaultGasPrice,
       defaultInterval,
       defaultGelatoFee,
-      wethSwapRoute,
+      // wethSwapRoute,
       // btcSwapRoute,
       involica,
       resolver,
@@ -92,6 +92,7 @@ describe('Integration Test: Gelato DCA', function () {
       await usdc.connect(alice).approve(involica.address, defaultFund)
       await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
       await involica.connect(alice).setPosition(
+        alice.address,
         usdc.address,
         [
           {
@@ -103,6 +104,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultDCA,
         defaultInterval,
         defaultGasPrice,
+        true,
       )
 
       const involicaUsdcBefore = await usdc.balanceOf(involica.address)
@@ -161,6 +163,7 @@ describe('Integration Test: Gelato DCA', function () {
       // Create position then set approved to 0
       await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
       await involica.connect(alice).setPosition(
+        alice.address,
         usdc.address,
         [
           {
@@ -172,6 +175,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultDCA,
         defaultInterval,
         defaultGasPrice,
+        true,
       )
       await usdc.connect(alice).approve(involica.address, 0)
 
@@ -191,12 +195,12 @@ describe('Integration Test: Gelato DCA', function () {
         )
 
       // Should fail to reInit without approval
-      await expect(involica.connect(alice).reInitPosition()).to.be.revertedWith('Approve for at least 1 DCA')
+      await expect(involica.connect(alice).reInitPosition(true)).to.be.revertedWith('Approve for at least 1 DCA')
 
       // Approve more funds, reInit should be successful
       await usdc.connect(alice).approve(involica.address, defaultFund.mul(1000))
 
-      const tx = await involica.connect(alice).reInitPosition()
+      const tx = await involica.connect(alice).reInitPosition(true)
       expect(tx).to.emit(involica, 'InitializeTask')
     })
     it('should DCA until wallet balance runs out, then finalize with "Insufficient funds to pull from wallet"', async () => {
@@ -204,6 +208,7 @@ describe('Integration Test: Gelato DCA', function () {
       await usdc.connect(alice).transfer(bob.address, aliceUsdcInit.sub(defaultFund))
       await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
       await involica.connect(alice).setPosition(
+        alice.address,
         usdc.address,
         [
           {
@@ -215,6 +220,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultDCA,
         defaultInterval,
         defaultGasPrice,
+        true,
       )
 
       const involicaUsdcBefore = await usdc.balanceOf(involica.address)
@@ -274,6 +280,7 @@ describe('Integration Test: Gelato DCA', function () {
       const aliceUsdcInit = await usdc.balanceOf(alice.address)
       await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
       await involica.connect(alice).setPosition(
+        alice.address,
         usdc.address,
         [
           {
@@ -285,6 +292,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultDCA,
         defaultInterval,
         defaultGasPrice,
+        true,
       )
       await usdc.connect(alice).transfer(bob.address, aliceUsdcInit)
 
@@ -304,17 +312,18 @@ describe('Integration Test: Gelato DCA', function () {
         )
 
       // Revert with no wallet balance
-      await expect(involica.connect(alice).reInitPosition()).to.be.revertedWith('Wallet balance for at least 1 DCA')
+      await expect(involica.connect(alice).reInitPosition(true)).to.be.revertedWith('Wallet balance for at least 1 DCA')
 
       // Give balance and reInit
       await usdc.connect(bob).transfer(alice.address, defaultFund)
 
-      const tx = await involica.connect(alice).reInitPosition()
+      const tx = await involica.connect(alice).reInitPosition(true)
       expect(tx).to.emit(involica, 'InitializeTask')
     })
     it('should DCA until treasury runs out, then finalize with Treasury out of gas', async () => {
       await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
       await involica.connect(alice).setPosition(
+        alice.address,
         usdc.address,
         [
           {
@@ -326,6 +335,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultDCA,
         defaultInterval,
         defaultGasPrice,
+        true,
       )
 
       const balanceBeforeUsdc = await usdc.balanceOf(alice.address)
@@ -377,6 +387,7 @@ describe('Integration Test: Gelato DCA', function () {
       // Create position and drain it
       await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
       await involica.connect(alice).setPosition(
+        alice.address,
         usdc.address,
         [
           {
@@ -388,6 +399,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultDCA,
         defaultInterval,
         defaultGasPrice,
+        true,
       )
       await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
 
@@ -403,7 +415,11 @@ describe('Integration Test: Gelato DCA', function () {
       const position2 = (await fetcher.fetchUserData(alice.address)).position
       expect(position2.finalizationReason).to.be.eq('')
 
-      const payload2 = (await resolver.checkPositionExecutable(alice.address))[1]
+      const now = await getCurrentTimestamp()
+      await fastForwardTo(now.add(defaultInterval).toNumber())
+
+      const payload = await resolver.checkPositionExecutable(alice.address)
+      const payload2 = payload[1]
       const execTx2 = await ops
         .connect(opsGelatoSigner)
         .exec(
@@ -418,6 +434,64 @@ describe('Integration Test: Gelato DCA', function () {
         )
 
       expect(execTx2).to.emit(involica, 'FinalizeDCA')
+    })
+    it('depositing treasury funds should not re-initialize task if allowance or balance insufficient', async () => {
+      // Create position and drain it
+      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
+      await involica.connect(alice).setPosition(
+        alice.address,
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+        true,
+      )
+      await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
+
+      const position1 = (await fetcher.fetchUserData(alice.address)).position
+      expect(position1.finalizationReason).to.be.eq('Treasury out of gas')
+
+      // Set Insufficient allowance and balance
+      await usdc.connect(alice).approve(involica.address, 0)
+      await usdc.connect(alice).transfer(bob.address, await usdc.balanceOf(alice.address))
+      expect(await usdc.allowance(alice.address, involica.address)).to.be.eq(0)
+      expect(await usdc.balanceOf(alice.address)).to.be.eq(0)
+
+      const taskId0 = (await fetcher.fetchUserData(alice.address)).position.taskId
+      expect(taskId0).to.eq(emptyBytes32)
+
+      // Deposit treasury should not re-initialize task
+      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
+
+      const taskId1 = (await fetcher.fetchUserData(alice.address)).position.taskId
+      expect(taskId1).to.eq(emptyBytes32)
+
+      // Set Sufficient allowance
+      await usdc.connect(alice).approve(involica.address, defaultDCA)
+
+      // Deposit treasury should not re-initialize task
+      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
+
+      const taskId2 = (await fetcher.fetchUserData(alice.address)).position.taskId
+      expect(taskId2).to.eq(emptyBytes32)
+
+      // Add Sufficient balance
+      await usdc.connect(bob).transfer(alice.address, await usdc.balanceOf(bob.address))
+
+      // Deposit treasury should re-initialize task
+      const tx = await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
+
+      const task3 = (await fetcher.fetchUserData(alice.address)).position.taskId
+      expect(task3).to.not.eq(emptyBytes32)
+
+      expect(tx).to.emit(involica, 'InitializeTask')
     })
   })
 })

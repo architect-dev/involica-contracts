@@ -1,12 +1,11 @@
 /* eslint-disable no-console */
 import hre, { ethers } from 'hardhat'
-import { BOO_ADDRESS, USDC_ADDRESS, WBTC_ADDRESS, WNATIVE_ADDRESS } from '../constants'
 import { readContractAddresses } from '../test/utils'
+import { tokenSymbols } from '../constants/tokenSymbols'
 import { Involica } from '../typechain'
+import { getAddress } from 'ethers/lib/utils'
 
-const allowedTokens = [WNATIVE_ADDRESS, USDC_ADDRESS, WBTC_ADDRESS, BOO_ADDRESS]
-
-async function main() {
+export const syncTokens = async (): Promise<void> => {
   const [signer] = await hre.ethers.getSigners()
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const chainId = hre.network.config.chainId!
@@ -19,11 +18,9 @@ async function main() {
   const allTokens: Record<string, boolean> = {}
 
   const chainAllowedTokens: Record<string, boolean> = {}
-  allowedTokens.forEach((token) => {
-    if (token[chainId] != null) {
-      chainAllowedTokens[token[chainId]] = true
-      allTokens[token[chainId]] = true
-    }
+  Object.keys(tokenSymbols[chainId]).forEach((token) => {
+    chainAllowedTokens[token] = true
+    allTokens[token] = true
   })
 
   // eslint-disable-next-line prettier/prettier
@@ -63,14 +60,15 @@ async function main() {
   })
 
   // Set data
-  involica.connect(signer).setAllowedTokens(tokenAddresses, alloweds)
+  const tx = await involica.connect(signer).setAllowedTokens(tokenAddresses, alloweds)
+  await tx.wait()
 
   console.log('Updated allowed tokens, changes:', tokenChanges)
 }
 
 // We recommend this pattern to be able to use async/await everywhere
 // and properly handle errors.
-main()
+syncTokens()
   .then(() => process.exit(0))
   .catch((error) => {
     console.error(error)

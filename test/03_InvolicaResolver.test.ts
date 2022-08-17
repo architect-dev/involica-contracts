@@ -1,5 +1,5 @@
 import { ethers } from 'hardhat'
-import { Involica, InvolicaResolver, IERC20 } from '../typechain'
+import { Involica, InvolicaResolver, IERC20, Oracle } from '../typechain'
 import chai from 'chai'
 import { solidity } from 'ethereum-waffle'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
@@ -40,7 +40,7 @@ describe('Involica Resolver', function () {
 
   let involica: Involica
   let resolver: InvolicaResolver
-  // let oracle: Oracle
+  let oracle: Oracle
   // let fetcher: InvolicaFetcher
   // let ops: IOps
   let uniRouter: Contract
@@ -75,7 +75,7 @@ describe('Involica Resolver', function () {
       btcSwapRoute,
       involica,
       resolver,
-      // oracle,
+      oracle,
       // fetcher,
       // ops,
       uniRouter,
@@ -94,6 +94,7 @@ describe('Involica Resolver', function () {
     beforeEach(async () => {
       await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
       await involica.connect(alice).setPosition(
+        alice.address,
         usdc.address,
         [
           {
@@ -110,6 +111,7 @@ describe('Involica Resolver', function () {
         defaultDCA,
         defaultInterval,
         defaultGasPrice,
+        true,
       )
     })
     it('should return false if user doesnt have position', async () => {
@@ -119,14 +121,22 @@ describe('Involica Resolver', function () {
       expect(canExec).to.be.eq(false)
 
       expect(toUtf8String(payload)).to.be.eq('User doesnt have a position')
+
+      const { canExec: canExecExecCheck, reason } = await resolver.fetchPositionExecConditions(alice.address)
+      expect(canExecExecCheck).to.eq(false)
+      expect(reason).to.eq('User doesnt have a position')
     })
     it('should return false if user position not mature', async () => {
-      await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute, btcSwapRoute], [0, 0])
+      await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute, btcSwapRoute], [0, 0], [0, 0])
 
       const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)
       expect(canExec).to.be.eq(false)
 
       expect(toUtf8String(payload)).to.be.eq('DCA not mature')
+
+      const { canExec: canExecExecCheck, reason } = await resolver.fetchPositionExecConditions(alice.address)
+      expect(canExecExecCheck).to.eq(false)
+      expect(reason).to.eq('DCA not mature')
     })
     it('should return false if gas price is too expensive', async () => {
       const [canExec, payload] = await resolver.checkPositionExecutable(alice.address, {
@@ -135,14 +145,26 @@ describe('Involica Resolver', function () {
       expect(canExec).to.be.eq(false)
 
       expect(toUtf8String(payload)).to.be.eq('Gas too expensive')
+
+      const { canExec: canExecExecCheck, reason } = await resolver.fetchPositionExecConditions(alice.address, {
+        gasPrice: parseGwei(defaultGasPrice).mul(2),
+      })
+      expect(canExecExecCheck).to.eq(false)
+      expect(reason).to.eq('Gas too expensive')
     })
     it('should return true if position is ready', async () => {
       const [canExec] = await resolver.checkPositionExecutable(alice.address)
       expect(canExec).to.be.eq(true)
+
+      const { canExec: canExecExecCheck } = await resolver.fetchPositionExecConditions(alice.address)
+      expect(canExecExecCheck).to.eq(true)
     })
     it('should return correct swapsAmountOutMins', async () => {
       const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)
       expect(canExec).to.be.eq(true)
+
+      const wethPrice = (await oracle.getPriceUsdc(weth.address)).price
+      const wbtcPrice = (await oracle.getPriceUsdc(wbtc.address)).price
 
       const wethAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), wethSwapRoute)
       const wbtcAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), btcSwapRoute)
@@ -159,6 +181,7 @@ describe('Involica Resolver', function () {
         1e6,
         [wethSwapRoute, btcSwapRoute],
         [wethAmountOutMin, wbtcAmountOutMin],
+        [wethPrice, wbtcPrice],
       ])
 
       expect(payload).to.be.eq(taskData)
@@ -167,6 +190,9 @@ describe('Involica Resolver', function () {
       const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)
       expect(canExec).to.be.eq(true)
 
+      const wethPrice = (await oracle.getPriceUsdc(weth.address)).price
+      const wbtcPrice = (await oracle.getPriceUsdc(wbtc.address)).price
+
       const wethAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), wethSwapRoute)
       const wbtcAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), btcSwapRoute)
 
@@ -182,6 +208,7 @@ describe('Involica Resolver', function () {
         1e6,
         [wethSwapRoute, btcSwapRoute],
         [wethAmountOutMin, wbtcAmountOutMin],
+        [wethPrice, wbtcPrice],
       ])
 
       expect(payload).to.be.eq(taskData)

@@ -107,7 +107,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
         emit DepositTreasury(msg.sender, msg.value);
 
-        _checkAndInitializeTask(positions[msg.sender]);
+        _checkAndInitializeTask(positions[msg.sender], false);
     }
 
     function withdrawTreasury(uint256 _amount) public nonReentrant {
@@ -128,16 +128,18 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     // POSITION MANAGEMENT
 
     function setPosition(
+        address _recipient,
         address _tokenIn,
         PositionOut[] memory _outs,
         uint256 _amountDCA,
         uint256 _intervalDCA,
-        uint256 _maxGasPrice
-    ) public payable whenNotPaused nonReentrant {
+        uint256 _maxGasPrice,
+        bool _executeImmediately
+    ) public whenNotPaused nonReentrant {
         require(userTreasuries[msg.sender] > 0, 'Treasury must not be 0');
         require(_amountDCA > 0, 'DCA amount must be > 0');
         require(_intervalDCA >= 60, 'DCA interval must be > 60s');
-        require(_outs.length <= 6, 'No more than 6 out tokens');
+        require(_outs.length <= 8, 'No more than 8 out tokens');
 
         Position storage position = positions[msg.sender];
 
@@ -155,6 +157,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         position.amountDCA = _amountDCA;
         position.intervalDCA = _intervalDCA;
         position.maxGasPrice = _maxGasPrice * 1 gwei;
+        position.recipient = _recipient == address(0) ? msg.sender : _recipient;
 
         // Add tokens to position
         delete position.outs;
@@ -178,13 +181,13 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         }
         require(weightsSum == 10_000, 'Weights do not sum to 10000');
 
-        emit SetPosition(msg.sender, _tokenIn, position.outs, _amountDCA, _intervalDCA, _maxGasPrice);
+        emit SetPosition(msg.sender, position.recipient, _tokenIn, position.outs, _amountDCA, _intervalDCA, _maxGasPrice);
 
         // New position needs to be initialized (must call from array of positions to persist taskId)
-        _checkAndInitializeTask(positions[msg.sender]);
+        _checkAndInitializeTask(positions[msg.sender], _executeImmediately);
     }
 
-    function reInitPosition() public whenNotPaused positionExists nonReentrant {
+    function reInitPosition(bool _executeImmediately) public whenNotPaused positionExists nonReentrant {
         Position storage position = positions[msg.sender];
 
         require(position.taskId == bytes32(0), 'Task already initialized');
@@ -198,7 +201,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             'Wallet balance for at least 1 DCA'
         );
 
-        _checkAndInitializeTask(position);
+        _checkAndInitializeTask(position, _executeImmediately);
     }
 
     function exitPosition() public positionExists nonReentrant {
@@ -218,9 +221,11 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     // TASK MANAGEMENT
 
-    function _checkAndInitializeTask(Position storage _position) internal {
+    function _checkAndInitializeTask(Position storage _position, bool _executeImmediately) internal {
         if (_position.user == address(0)) return;
         if (_position.taskId != bytes32(0)) return;
+        if (IERC20(_position.tokenIn).allowance(_position.user, address(this)) < _position.amountDCA) return;
+        if (IERC20(_position.tokenIn).balanceOf(_position.user) < _position.amountDCA) return;
 
         _position.taskId = IOps(ops).createTimedTask(
             0,
@@ -234,7 +239,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         );
 
         _position.finalizationReason = '';
-        _position.lastDCA = 0;
+        _position.lastDCA = _executeImmediately ? 0 : block.timestamp;
 
         emit InitializeTask(_position.user, _position.taskId);
     }
@@ -282,7 +287,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     // DCA EXECUTION
 
-    function executeDCA(address _user, uint256 tokenInPrice, address[][] calldata swapsRoutes, uint256[] calldata swapsAmountOutMin)
+    function executeDCA(address _user, uint256 tokenInPrice, address[][] calldata swapsRoutes, uint256[] calldata swapsAmountOutMin, uint256[] calldata outPrices)
         public
         override
         whenNotPaused
@@ -293,11 +298,18 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         Position storage position = positions[_user];
         require(position.user == _user && _user != address(0), 'User doesnt have a position');
         require(msg.sender == _user || block.timestamp >= position.lastDCA + position.intervalDCA, 'DCA not mature');
-        position.lastDCA = block.timestamp;
+
+        // Increment lastDCA to keep schedule
+        if (position.lastDCA == 0) {
+            position.lastDCA = block.timestamp;
+        } else {
+            position.lastDCA += position.intervalDCA;
+        }
 
         // Validate extraData length
         require(position.outs.length == swapsRoutes.length, 'Routes for swaps is invalid');
         require(position.outs.length == swapsAmountOutMin.length, 'AmountOut for swaps is invalid');
+        require(position.outs.length == outPrices.length, 'OutPrices for swaps is invalid');
 
         (uint256 fee, ) = IOps(ops).getFeeDetails();
         _transfer(fee, NATIVE_TOKEN);
@@ -317,7 +329,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         _executeDCASwaps(position, tokenInPrice, swapsRoutes, swapsAmountOutMin);
 
         // Send unused in and all swapped outs back to users wallet
-        _finalizeDCA(position, tokenInPrice);
+        _finalizeDCA(position, tokenInPrice, outPrices);
     }
 
     uint256 activeTxAmountSwapped = 0;
@@ -365,6 +377,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
 
             (amounts, swapErr, swapErrReason) = _swap(
+                position.recipient,
                 (position.amountDCA * position.outs[i].weight * (10_000 - txFee)) / (10_000 * 10_000),
                 swapsAmountOutMin[i],
                 swapsRoutes[i]
@@ -401,6 +414,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     }
 
     function _swap(
+        address _recipient,
         uint256 _amountIn,
         uint256 _amountOutMin,
         address[] memory _path
@@ -413,7 +427,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         )
     {
         try
-            uniRouter.swapExactTokensForTokens(_amountIn, _amountOutMin, _path, address(this), block.timestamp)
+            uniRouter.swapExactTokensForTokens(_amountIn, _amountOutMin, _path, _recipient, block.timestamp)
         returns (uint256[] memory _amounts) {
             amounts = _amounts;
             err = false;
@@ -423,7 +437,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         }
     }
 
-    function _finalizeDCA(Position storage position, uint256 tokenInPrice) internal {
+    function _finalizeDCA(Position storage position, uint256 tokenInPrice, uint256[] memory outPrices) internal {
         UserTx storage userTx = userTxs[position.user][userTxs[position.user].length - 1];
 
         // Transfer swap out tokens to user's wallet, populate 
@@ -432,9 +446,6 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         for (uint256 i = 0; i < userTx.tokenTxs.length; i++) {
             tokens[i] = userTx.tokenTxs[i].tokenOut;
             amounts[i] = userTx.tokenTxs[i].amountOut;
-            if (amounts[i] > 0) {
-                IERC20(tokens[i]).safeTransfer(position.user, amounts[i]);
-            }
         }
 
         // Take any fee
@@ -448,7 +459,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             IERC20(position.tokenIn).safeTransfer(position.user, position.amountDCA - (activeTxAmountSwapped + activeTxFeeTaken));
         }
 
-        emit FinalizeDCA(position.user, position.tokenIn, tokenInPrice, activeTxAmountSwapped, tokens, amounts, activeTxFeeTaken);
+        emit FinalizeDCA(position.user, position.recipient, position.tokenIn, tokenInPrice, activeTxAmountSwapped, tokens, amounts, outPrices, activeTxFeeTaken);
     }
 
     // ADMINISTRATION

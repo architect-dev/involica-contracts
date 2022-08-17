@@ -2,6 +2,7 @@
 import hre from 'hardhat'
 import { OPS_ADDRESS, ROUTER_ADDRESS, USDC_ADDRESS, WNATIVE_ADDRESS } from '../constants'
 import { failableVerify, writeContractAddresses } from '../test/utils'
+import { syncTokens } from './syncTokens'
 
 async function main() {
   const [signer] = await hre.ethers.getSigners()
@@ -83,6 +84,8 @@ async function main() {
     ['usdc', USDC_ADDRESS[chainId]],
     ['weth', WNATIVE_ADDRESS[chainId]],
   ])
+
+  await syncTokens()
 }
 
 // We recommend this pattern to be able to use async/await everywhere

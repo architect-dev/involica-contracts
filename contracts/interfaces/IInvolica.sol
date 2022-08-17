@@ -15,6 +15,7 @@ interface IInvolica {
         uint256 maxGasPrice;
         bytes32 taskId;
         string finalizationReason;
+        address recipient;
     }
     struct PositionOut {
         address token;
@@ -46,6 +47,7 @@ interface IInvolica {
     // Events
     event SetPosition(
         address indexed owner,
+        address indexed recipient,
         address tokenIn,
         PositionOut[] outs,
         uint256 amountDCA,
@@ -68,11 +70,13 @@ interface IInvolica {
 
     event FinalizeDCA(
         address indexed user,
+        address indexed recipient,
         address indexed tokenIn,
-        uint256 indexed inAmount,
+        uint256 inAmount,
         uint256 inPrice,
         address[] outTokens,
         uint256[] outAmounts,
+        uint256[] outPrices,
         uint256 involicaTxFee
     );
 
@@ -94,7 +98,7 @@ interface IInvolica {
     function fetchUserTxs(address user) external view returns (UserTx[] memory);
 
     // Callable
-    function executeDCA(address, uint256 tokenInPrice, address[][] calldata swapsRoutes, uint256[] calldata swapsAmountOutMin) external;
+    function executeDCA(address, uint256 tokenInPrice, address[][] calldata swapsRoutes, uint256[] calldata swapsAmountOutMin, uint256[] calldata outPrices) external;
 }
 
 interface IInvolicaResolver {

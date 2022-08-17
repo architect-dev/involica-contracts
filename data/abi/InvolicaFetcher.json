@@ -157,6 +157,11 @@
             "internalType": "string",
             "name": "finalizationReason",
             "type": "string"
+          },
+          {
+            "internalType": "address",
+            "name": "recipient",
+            "type": "address"
           }
         ],
         "internalType": "struct IInvolica.Position",
