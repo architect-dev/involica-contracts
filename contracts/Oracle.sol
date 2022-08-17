@@ -80,11 +80,14 @@ contract Oracle {
     function _amountOut(address[] memory path) internal view returns (uint256) {
         IERC20Ext token0 = IERC20Ext(path[0]);
         uint256 amountIn = 10**uint256(token0.decimals());
-        uint256[] memory amountsOut = router.getAmountsOut(amountIn, path);
 
-        uint256 amountOut = amountsOut[amountsOut.length - 1];
-        uint256 feeBips = 20; // .2% per swap
-        amountOut = (amountOut * 10000) / (10000 - (feeBips * path.length));
-        return amountOut;
+        try router.getAmountsOut(amountIn, path) returns (uint256[] memory amountsOut) {
+            uint256 amountOut = amountsOut[amountsOut.length - 1];
+            uint256 feeBips = 20; // .2% per swap
+            amountOut = (amountOut * 10000) / (10000 - (feeBips * path.length));
+            return amountOut;
+        } catch {
+            return 0;
+        }
     }
 }

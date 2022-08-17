@@ -19,7 +19,9 @@
     "deploy:ftm": "npx hardhat --network fantom run scripts/deploy.ts",
     "deploySetResolver:ftm": "npx hardhat --network fantom run scripts/deploySetResolver.ts",
     "deployOracleFetcher:ftm": "npx hardhat --network fantom run scripts/deployOracleFetcher.ts",
-    "syncTokens:ftm": "npx hardhat --network fantom run scripts/syncTokens.ts"
+    "syncTokens:ftm": "npx hardhat --network fantom run scripts/syncTokens.ts",
+    "exitPosition:ftm": "npx hardhat --network fantom run scripts/exitPosition.ts",
+    "checkOnTask:ftm": "npx hardhat --network fantom run scripts/checkOnTask.ts"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",

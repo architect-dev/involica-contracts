@@ -138,8 +138,9 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     ) public whenNotPaused nonReentrant {
         require(userTreasuries[msg.sender] > 0, 'Treasury must not be 0');
         require(_amountDCA > 0, 'DCA amount must be > 0');
-        require(_intervalDCA >= 60, 'DCA interval must be > 60s');
+        require(_intervalDCA >= 60, 'DCA interval must be >= 60s');
         require(_outs.length <= 8, 'No more than 8 out tokens');
+        require(_maxGasPrice >= 3e9, 'Max gas price must be >= 3 gwei');
 
         Position storage position = positions[msg.sender];
 
@@ -156,7 +157,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
         position.amountDCA = _amountDCA;
         position.intervalDCA = _intervalDCA;
-        position.maxGasPrice = _maxGasPrice * 1 gwei;
+        position.maxGasPrice = _maxGasPrice;
         position.recipient = _recipient == address(0) ? msg.sender : _recipient;
 
         // Add tokens to position

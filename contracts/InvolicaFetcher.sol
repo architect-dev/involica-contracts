@@ -59,7 +59,7 @@ contract InvolicaFetcher {
 
         // Fetch wallet allowance and balance
         if (userHasPosition) {
-            allowance = IERC20(position.tokenIn).allowance(position.user, address(this));
+            allowance = IERC20(position.tokenIn).allowance(position.user, address(involica));
             balance = IERC20(position.tokenIn).balanceOf(position.user);
             uint256 limitedValue = allowance < balance ? allowance : balance;
             dcasRemaining = position.amountDCA > 0 ? limitedValue / position.amountDCA : 0;
@@ -80,15 +80,17 @@ contract InvolicaFetcher {
             balance: _user.balance
         });
         
-        uint256[] memory amounts;
         swapsAmountOutMin = new uint256[](position.outs.length);
         for (uint256 i = 0; i < position.outs.length; i++) {
             address[] memory route = oracle.getRoute(position.tokenIn, position.outs[i].token);
-            amounts = IUniswapV2Router(involica.fetchUniRouter()).getAmountsOut(
+            try IUniswapV2Router(involica.fetchUniRouter()).getAmountsOut(
                 position.amountDCA * position.outs[i].weight / 10_000,
                 route
-            );
-            swapsAmountOutMin[i] = amounts[amounts.length - 1] * (10_000 - position.outs[i].maxSlippage) / 10_000;
+            ) returns (uint256[] memory amounts) {
+                swapsAmountOutMin[i] = amounts[amounts.length - 1] * (10_000 - position.outs[i].maxSlippage) / 10_000;
+            } catch {
+                swapsAmountOutMin[i] = 0;
+            }
         }
     }
 

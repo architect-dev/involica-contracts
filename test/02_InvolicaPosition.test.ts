@@ -351,7 +351,7 @@ describe('Involica Position', function () {
           defaultGasPrice,
           true,
         ),
-      ).to.be.revertedWith('DCA interval must be > 60s')
+      ).to.be.revertedWith('DCA interval must be >= 60s')
     })
     it('should revert if allowance is 0', async function () {
       await usdc.connect(alice).approve(involica.address, 0)

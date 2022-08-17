@@ -85,7 +85,7 @@ async function main() {
     ['weth', WNATIVE_ADDRESS[chainId]],
   ])
 
-  await syncTokens()
+  // await syncTokens()
 }
 
 // We recommend this pattern to be able to use async/await everywhere
