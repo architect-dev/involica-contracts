@@ -105,6 +105,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const involicaUsdcBefore = await usdc.balanceOf(involica.address)
@@ -173,6 +174,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       // Position should not have a revert reason
@@ -210,6 +212,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const involicaUsdcBefore = await usdc.balanceOf(involica.address)
@@ -279,6 +282,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       // Position should not have a revert reason
@@ -314,6 +318,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const gasEstimation = ((450000 + 1 * 195000) * parseGwei(100).toNumber()).toString()
@@ -379,6 +384,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
       await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
 
@@ -430,6 +436,7 @@ describe('Integration Test: Gelato DCA', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
       await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
 

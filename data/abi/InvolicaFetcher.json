@@ -157,6 +157,11 @@
             "internalType": "address",
             "name": "recipient",
             "type": "address"
+          },
+          {
+            "internalType": "bool",
+            "name": "manualExecutionOnly",
+            "type": "bool"
           }
         ],
         "internalType": "struct IInvolica.Position",

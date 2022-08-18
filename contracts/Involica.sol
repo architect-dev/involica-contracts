@@ -118,7 +118,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         Position storage position = positions[msg.sender];
         _withdrawTreasury(userTreasuries[msg.sender]);
         position.user = address(0);
-        position.lastDCA = 0;
+
+        _clearTask(position);
 
         emit ExitPosition(msg.sender);
     }
@@ -140,7 +141,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         uint256 _amountDCA,
         uint256 _intervalDCA,
         uint256 _maxGasPrice,
-        bool _executeImmediately
+        bool _executeImmediately,
+        bool _manualExecutionOnly
     ) public payable whenNotPaused nonReentrant {
         require(userTreasuries[msg.sender] > 0 || msg.value > 0, 'Treasury must not be 0');
         require(_amountDCA > 0, 'DCA amount must be > 0');
@@ -193,12 +195,18 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             position.outs,
             _amountDCA,
             _intervalDCA,
-            _maxGasPrice
+            _maxGasPrice,
+            _manualExecutionOnly
         );
 
-        // New position needs to be initialized (must call from array of positions to persist taskId)
-        _initializeTask(positions[msg.sender]);
-        _bringLastDCACurrent(positions[msg.sender], _executeImmediately);
+        if (!_manualExecutionOnly) {
+            // Initialize task if it doesn't already exist
+            _initializeTask(positions[msg.sender]);
+            _bringLastDCACurrent(positions[msg.sender], _executeImmediately);
+        } else {
+            // Clear existing task if necessary
+            _clearTask(positions[msg.sender]);
+        }
     }
 
     function _initializeTask(Position storage _position) internal {
@@ -217,6 +225,16 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         );
 
         emit InitializeTask(_position.user, _position.taskId);
+    }
+
+    function _clearTask(Position storage _position) internal {
+        // Early exit if task doesnt exist
+        if (_position.taskId == bytes32(0)) return;
+
+        emit ClearTask(_position.user, _position.taskId);
+
+        _position.lastDCA = 0;
+        IOps(ops).cancelTask(_position.taskId);
     }
 
     function _bringLastDCACurrent(Position storage _position, bool _executeImmediately) internal {

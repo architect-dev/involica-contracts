@@ -15,6 +15,7 @@ interface IInvolica {
         uint256 maxGasPrice;
         bytes32 taskId;
         address recipient;
+        bool manualExecutionOnly;
     }
     struct PositionOut {
         address token;
@@ -51,7 +52,8 @@ interface IInvolica {
         PositionOut[] outs,
         uint256 amountDCA,
         uint256 intervalDCA,
-        uint256 maxGasPrice
+        uint256 maxGasPrice,
+        bool manualExecutionOnly
     );
     event PositionUpdated(
         address indexed user,
@@ -65,7 +67,7 @@ interface IInvolica {
     event WithdrawTreasury(address indexed user, uint256 indexed amount);
 
     event InitializeTask(address indexed user, bytes32 taskId);
-    event FinalizeTask(address indexed user, bytes32 taskId, string reason);
+    event ClearTask(address indexed user, bytes32 taskId);
 
     event FinalizeDCA(
         address indexed user,

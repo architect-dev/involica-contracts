@@ -112,6 +112,7 @@ describe('Involica Resolver', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
     })
     it('should return false if user doesnt have position', async () => {

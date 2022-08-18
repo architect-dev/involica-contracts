@@ -117,6 +117,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Pausable: paused')
     })
@@ -138,6 +139,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Treasury must not be 0')
     })
@@ -159,6 +161,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
           { value: defaultTreasuryFund },
         ),
       ).to.emit(involica, 'SetPosition')
@@ -183,6 +186,7 @@ describe('Involica Position', function () {
           defaultInterval,
           1e9,
           true,
+          false,
         ),
       ).to.be.revertedWith('Max gas price must be >= 3 gwei')
     })
@@ -203,6 +207,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Token is not allowed')
     })
@@ -223,6 +228,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Token is not allowed')
     })
@@ -243,6 +249,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Pair is blacklisted')
     })
@@ -263,6 +270,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Same token both sides of pair')
     })
@@ -288,6 +296,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('No more than 8 out tokens')
     })
@@ -308,6 +317,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Weights do not sum to 10000')
 
@@ -327,6 +337,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Non zero weight')
     })
@@ -346,6 +357,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('DCA amount must be > 0')
     })
@@ -365,6 +377,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Invalid slippage')
     })
@@ -384,6 +397,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Token is not allowed')
     })
@@ -403,6 +417,7 @@ describe('Involica Position', function () {
           30,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('DCA interval must be >= 60s')
     })
@@ -423,6 +438,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Approve for at least 1 DCA')
     })
@@ -444,6 +460,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Wallet balance for at least 1 DCA')
     })
@@ -463,6 +480,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const expectedLastDCA = await getExpectedLastDCA()
@@ -505,6 +523,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const userHasPositionAfter = (await fetcher.fetchUserData(alice.address)).userHasPosition
@@ -536,6 +555,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.be.revertedWith('Weights do not sum to 10000')
     })
@@ -564,6 +584,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       expect(tx).to.emit(involica, 'SetPosition')
@@ -618,6 +639,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
     })
 
@@ -665,6 +687,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
     })
 
@@ -829,6 +852,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const { taskId: taskIdFinal, lastDCA: lastDCAFinal } = (await fetcher.fetchUserData(alice.address)).position
@@ -851,6 +875,7 @@ describe('Involica Position', function () {
         defaultDCA,
         defaultInterval,
         defaultGasPrice,
+        false,
         false,
       )
       const currentTimestamp = await getCurrentTimestamp()
@@ -978,6 +1003,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const wethPrice = (await oracle.getPriceUsdc(weth.address)).price
@@ -1054,6 +1080,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const balanceInBefore = await usdc.balanceOf(alice.address)
@@ -1141,6 +1168,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const balanceInBefore = await usdc.balanceOf(alice.address)
@@ -1190,6 +1218,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const { recipient } = (await fetcher.fetchUserData(alice.address)).position
@@ -1210,6 +1239,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const { recipient } = (await fetcher.fetchUserData(alice.address)).position
@@ -1230,6 +1260,7 @@ describe('Involica Position', function () {
         defaultInterval,
         defaultGasPrice,
         true,
+        false,
       )
 
       const dcaAmount = (await fetcher.fetchUserData(alice.address)).position.amountDCA
@@ -1268,11 +1299,13 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.emit(involica, 'SetPosition')
 
       const tx = await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [btcSwapRoute], [0], [0])
       const receipt = await tx.wait()
+      // eslint-disable-next-line no-console
       console.log({
         gasUsed1token: receipt.gasUsed,
       })
@@ -1299,6 +1332,7 @@ describe('Involica Position', function () {
           defaultInterval,
           defaultGasPrice,
           true,
+          false,
         ),
       ).to.emit(involica, 'SetPosition')
 
@@ -1321,6 +1355,7 @@ describe('Involica Position', function () {
           [0, 0, 0, 0, 0, 0, 0, 0],
         )
       const receipt = await tx.wait()
+      // eslint-disable-next-line no-console
       console.log({
         gasUsed8tokens: receipt.gasUsed,
       })
