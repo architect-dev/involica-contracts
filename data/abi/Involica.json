@@ -492,6 +492,66 @@
     "inputs": [
       {
         "internalType": "address",
+        "name": "_recipient",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_tokenIn",
+        "type": "address"
+      },
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "token",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "weight",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxSlippage",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct IInvolica.PositionOut[]",
+        "name": "_outs",
+        "type": "tuple[]"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amountDCA",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_intervalDCA",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_maxGasPrice",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "_executeImmediately",
+        "type": "bool"
+      }
+    ],
+    "name": "createAndFundPosition",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
         "name": "_user",
         "type": "address"
       },
@@ -1101,7 +1161,7 @@
     ],
     "name": "setPosition",
     "outputs": [],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

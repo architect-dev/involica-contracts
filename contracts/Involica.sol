@@ -134,6 +134,33 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     // POSITION MANAGEMENT
 
+    // Only for initial creation
+    function createAndFundPosition(
+        address _recipient,
+        address _tokenIn,
+        PositionOut[] memory _outs,
+        uint256 _amountDCA,
+        uint256 _intervalDCA,
+        uint256 _maxGasPrice,
+        bool _executeImmediately
+    ) public payable {
+        require(positions[msg.sender].user == address(0), 'User already has a position');
+        // Treasury is checked in setPosition, msg.value doesn't need to be validated here
+        userTreasuries[msg.sender] += msg.value;
+        emit DepositTreasury(msg.sender, msg.value);
+        setPosition(
+            _recipient,
+            _tokenIn,
+            _outs,
+            _amountDCA,
+            _intervalDCA,
+            _maxGasPrice,
+            _executeImmediately,
+            false // Cannot create manual position and add treasury
+        );
+    }
+
+    // Update position or create manual position
     function setPosition(
         address _recipient,
         address _tokenIn,
@@ -143,8 +170,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         uint256 _maxGasPrice,
         bool _executeImmediately,
         bool _manualExecutionOnly
-    ) public payable whenNotPaused nonReentrant {
-        require(userTreasuries[msg.sender] > 0 || msg.value > 0, 'Treasury must not be 0');
+    ) public whenNotPaused nonReentrant {
+        require(_manualExecutionOnly || userTreasuries[msg.sender] > 0, 'Treasury must not be 0');
         require(_amountDCA > 0, 'DCA amount must be > 0');
         require(_intervalDCA >= 60, 'DCA interval must be >= 60s');
         require(_outs.length <= 8, 'No more than 8 out tokens');
@@ -159,14 +186,13 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         position.user = msg.sender;
         position.tokenIn = _tokenIn;
 
-        if (msg.value != 0) {
-            userTreasuries[msg.sender] += msg.value;
+        // Validate balance / approval + wallet balance can cover at least 1 DCA
+        if (!_manualExecutionOnly) {
+            require(IERC20(_tokenIn).allowance(msg.sender, address(this)) >= _amountDCA, 'Approve for at least 1 DCA');
+            require(IERC20(_tokenIn).balanceOf(msg.sender) >= _amountDCA, 'Wallet balance for at least 1 DCA');
         }
 
-        // Validate balance / approval + wallet balance can cover at least 1 DCA
-        require(IERC20(_tokenIn).allowance(msg.sender, address(this)) >= _amountDCA, 'Approve for at least 1 DCA');
-        require(IERC20(_tokenIn).balanceOf(msg.sender) >= _amountDCA, 'Wallet balance for at least 1 DCA');
-
+        position.manualExecutionOnly = _manualExecutionOnly;
         position.amountDCA = _amountDCA;
         position.intervalDCA = _intervalDCA;
         position.maxGasPrice = _maxGasPrice;
@@ -233,8 +259,9 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
         emit ClearTask(_position.user, _position.taskId);
 
-        _position.lastDCA = 0;
         IOps(ops).cancelTask(_position.taskId);
+        _position.lastDCA = 0;
+        _position.taskId = bytes32(0);
     }
 
     function _bringLastDCACurrent(Position storage _position, bool _executeImmediately) internal {
@@ -269,16 +296,16 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         if (msg.sender != _user && block.timestamp < (position.lastDCA + position.intervalDCA)) {
             return (true, 'DCA not mature');
         }
-        if (position.maxGasPrice < tx.gasprice) {
+        if (!position.manualExecutionOnly && position.maxGasPrice < tx.gasprice) {
             return (true, 'Gas too expensive');
         }
 
-        // Funds must be approved for this tx and the next tx
+        // Funds must be approved for this tx
         if (IERC20(position.tokenIn).allowance(position.user, address(this)) < position.amountDCA) {
             return (true, 'Insufficient allowance');
         }
 
-        // Must be enough wallet balance for this and the next tx
+        // Must be enough wallet balance for this
         if (IERC20(position.tokenIn).balanceOf(position.user) < position.amountDCA) {
             return (true, 'Insufficient balance');
         }

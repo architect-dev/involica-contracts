@@ -52,7 +52,7 @@ describe('Involica Position', function () {
   let fetcher: InvolicaFetcher
   // let ops: IOps
 
-  // let emptyBytes32: string
+  let emptyBytes32: string
   // let aliceResolverHash: string
 
   let snapshotId: string
@@ -85,7 +85,7 @@ describe('Involica Position', function () {
       oracle,
       fetcher,
       // ops,
-      // emptyBytes32,
+      emptyBytes32,
       // aliceResolverHash,
       snapshotId,
     } = await prepare(250))
@@ -142,32 +142,6 @@ describe('Involica Position', function () {
           false,
         ),
       ).to.be.revertedWith('Treasury must not be 0')
-    })
-    it('should succeed if treasury fund amount is 0, but treasury added with setPosition', async () => {
-      await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
-
-      await expect(
-        involica.connect(alice).setPosition(
-          alice.address,
-          usdc.address,
-          [
-            {
-              token: weth.address,
-              weight: 10000,
-              maxSlippage: defaultSlippage,
-            },
-          ],
-          defaultDCA,
-          defaultInterval,
-          defaultGasPrice,
-          true,
-          false,
-          { value: defaultTreasuryFund },
-        ),
-      ).to.emit(involica, 'SetPosition')
-
-      const { userTreasury } = await fetcher.fetchUserData(alice.address)
-      expect(userTreasury).to.eq(defaultTreasuryFund)
     })
     it('should revert if maxGasPrice too low', async () => {
       await setAllowedToken(involica, usdc.address, false)
@@ -1278,6 +1252,274 @@ describe('Involica Position', function () {
 
       const bobWethDiff = bobWethAfter.sub(bobWethBefore)
       expect(bobWethDiff).to.be.gte(swapAmounts1[1])
+    })
+  })
+
+  describe('createAndFundPosition()', async () => {
+    it('createAndFundPosition() must have non-zero msg.value', async () => {
+      await expect(
+        involica.connect(alice).createAndFundPosition(
+          alice.address,
+          usdc.address,
+          [
+            {
+              token: weth.address,
+              weight: 10000,
+              maxSlippage: defaultSlippage,
+            },
+          ],
+          defaultDCA,
+          defaultInterval,
+          defaultGasPrice,
+          true,
+          { value: 0 },
+        ),
+      ).to.be.revertedWith('Treasury must not be 0')
+    })
+    it('createAndFundPosition() user must not already have a position', async () => {
+      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
+      await involica.connect(alice).setPosition(
+        alice.address,
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+        true,
+        false,
+      )
+
+      await expect(
+        involica.connect(alice).createAndFundPosition(
+          alice.address,
+          usdc.address,
+          [
+            {
+              token: weth.address,
+              weight: 10000,
+              maxSlippage: defaultSlippage,
+            },
+          ],
+          defaultDCA,
+          defaultInterval,
+          defaultGasPrice,
+          true,
+          { value: defaultTreasuryFund },
+        ),
+      ).to.be.revertedWith('User already has a position')
+    })
+    it('createAndFundPosition() should succeed after exit position', async () => {
+      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
+      await involica.connect(alice).setPosition(
+        alice.address,
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+        true,
+        false,
+      )
+
+      await involica.connect(alice).exitPosition()
+
+      const tx = await involica.connect(alice).createAndFundPosition(
+        alice.address,
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+        true,
+        { value: defaultTreasuryFund },
+      )
+      expect(tx).to.emit(involica, 'SetPosition')
+      expect(tx).to.emit(involica, 'DepositTreasury')
+    })
+    it('createAndFundPosition() should set values correctly', async () => {
+      await involica.connect(alice).createAndFundPosition(
+        alice.address,
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+        true,
+        { value: defaultTreasuryFund },
+      )
+
+      const { position, userTreasury } = await fetcher.fetchUserData(alice.address)
+
+      expect(userTreasury).to.eq(defaultTreasuryFund)
+      expect(position.user).to.eq(alice.address)
+      expect(position.tokenIn).to.eq(usdc.address)
+      expect(position.outs.length).to.eq(1)
+      expect(position.outs[0].token).to.eq(weth.address)
+      expect(position.amountDCA).to.eq(defaultDCA)
+      expect(position.intervalDCA).to.eq(defaultInterval)
+      expect(position.maxGasPrice).to.eq(defaultGasPrice)
+    })
+  })
+
+  describe('manualExecutionOnly', async () => {
+    beforeEach(async () => {
+      if ((await fetcher.fetchUserData(alice.address)).userHasPosition) {
+        await involica.connect(alice).exitPosition()
+      }
+    })
+
+    it('setPosition() manual should not require a treasury', async () => {
+      await expect(
+        involica.connect(alice).setPosition(
+          alice.address,
+          usdc.address,
+          [
+            {
+              token: weth.address,
+              weight: 10000,
+              maxSlippage: defaultSlippage,
+            },
+          ],
+          defaultDCA,
+          defaultInterval,
+          defaultGasPrice,
+          true,
+          true,
+        ),
+      ).to.not.be.revertedWith('Treasury must not be 0')
+    })
+    it('setPosition() with manual position should not require an allowance, or balance', async () => {
+      await expect(
+        involica.connect(alice).setPosition(
+          alice.address,
+          usdc.address,
+          [
+            {
+              token: weth.address,
+              weight: 10000,
+              maxSlippage: defaultSlippage,
+            },
+          ],
+          defaultDCA,
+          defaultInterval,
+          defaultGasPrice,
+          true,
+          true,
+        ),
+      ).to.emit(involica, 'SetPosition')
+    })
+    it('setPosition() to update from auto to manual should clear task', async () => {
+      await involica.connect(alice).createAndFundPosition(
+        alice.address,
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+        true,
+        { value: defaultTreasuryFund },
+      )
+
+      const { taskId: taskIdInit, lastDCA: lastDCAInit } = (await fetcher.fetchUserData(alice.address)).position
+      expect(taskIdInit).to.not.eq(emptyBytes32)
+      expect(lastDCAInit).to.be.gt(0)
+
+      const tx = await involica.connect(alice).setPosition(
+        alice.address,
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+        true,
+        true,
+      )
+
+      expect(tx).to.emit(involica, 'ClearTask')
+
+      const { taskId: taskIdFinal, lastDCA: lastDCAFinal } = (await fetcher.fetchUserData(alice.address)).position
+      expect(taskIdFinal).to.eq(emptyBytes32)
+      expect(lastDCAFinal).to.eq(0)
+    })
+    it('setPosition() to update from manual to auto should create task', async () => {
+      await involica.connect(alice).setPosition(
+        alice.address,
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+        true,
+        true,
+      )
+
+      const taskIdInit = (await fetcher.fetchUserData(alice.address)).position.taskId
+      expect(taskIdInit).to.eq(emptyBytes32)
+
+      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
+      const tx = await involica.connect(alice).setPosition(
+        alice.address,
+        usdc.address,
+        [
+          {
+            token: weth.address,
+            weight: 10000,
+            maxSlippage: defaultSlippage,
+          },
+        ],
+        defaultDCA,
+        defaultInterval,
+        defaultGasPrice,
+        true,
+        false,
+      )
+
+      expect(tx).to.emit(involica, 'InitializeTask')
+
+      const taskIdFinal = (await fetcher.fetchUserData(alice.address)).position.taskId
+      expect(taskIdFinal).to.not.eq(emptyBytes32)
     })
   })
 

@@ -3,6 +3,8 @@ import { IERC20, Involica, InvolicaFetcher } from '../typechain'
 import chai from 'chai'
 import { solidity } from 'ethereum-waffle'
 import { prepare } from './utils'
+import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
+import { BigNumber, BigNumberish } from 'ethers'
 
 const { expect } = chai
 chai.use(solidity)
@@ -14,7 +16,7 @@ describe('Involica Fetcher', function () {
   // let signers: SignerWithAddress[]
 
   // let deployer: SignerWithAddress
-  // let alice: SignerWithAddress
+  let alice: SignerWithAddress
   // let bob: SignerWithAddress
 
   // let opsSigner: SignerWithAddress
@@ -25,13 +27,13 @@ describe('Involica Fetcher', function () {
   let weth: IERC20
   let wbtc: IERC20
 
-  // let defaultTreasuryFund: BigNumber
+  let defaultTreasuryFund: BigNumber
   // let defaultFund: BigNumber
   // let defaultDCA: BigNumber
   // let defaultFee: BigNumber
-  // let defaultSlippage: BigNumber
-  // let defaultGasPrice: BigNumberish
-  // let defaultInterval: BigNumberish
+  let defaultSlippage: BigNumber
+  let defaultGasPrice: BigNumberish
+  let defaultInterval: BigNumberish
   // let defaultGelatoFee: BigNumber
   // let wethSwapRoute: string[]
   let btcSwapRoute: string[]
@@ -53,7 +55,7 @@ describe('Involica Fetcher', function () {
       // chainId,
       // signers,
       // deployer,
-      // alice,
+      alice,
       // bob,
       // opsSigner,
       // gelato,
@@ -61,13 +63,13 @@ describe('Involica Fetcher', function () {
       usdc,
       weth,
       wbtc,
-      // defaultTreasuryFund,
+      defaultTreasuryFund,
       // defaultFund,
       // defaultDCA,
       // defaultFee,
-      // defaultSlippage,
-      // defaultGasPrice,
-      // defaultInterval,
+      defaultSlippage,
+      defaultGasPrice,
+      defaultInterval,
       // defaultGelatoFee,
       // wethSwapRoute,
       btcSwapRoute,
@@ -129,5 +131,31 @@ describe('Involica Fetcher', function () {
     // })
 
     expectRoutesMatch(route, btcSwapRoute)
+  })
+  it('A reverting router.getAmountsOut() out should not halt fetching', async () => {
+    await involica.connect(alice).createAndFundPosition(
+      alice.address,
+      usdc.address,
+      [
+        {
+          token: wbtc.address,
+          weight: 1,
+          maxSlippage: defaultSlippage,
+        },
+        {
+          token: weth.address,
+          weight: 9999,
+          maxSlippage: defaultSlippage,
+        },
+      ],
+      1,
+      defaultInterval,
+      defaultGasPrice,
+      true,
+      { value: defaultTreasuryFund },
+    )
+
+    const { swapsAmountOutMin } = await fetcher.fetchUserData(alice.address)
+    expect(swapsAmountOutMin[0]).to.eq(0)
   })
 })
