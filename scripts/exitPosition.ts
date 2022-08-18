@@ -10,7 +10,8 @@ export const exitPosition = async (): Promise<void> => {
   const chainId = hre.network.config.chainId!
 
   // Get Deployed Involica
-  const [involicaAddress] = readContractAddresses(chainId, ['involica'])
+  // const [involicaAddress] = readContractAddresses(chainId, ['involica'])
+  const involicaAddress = '0x6aE0207A1a0e73e26237b6813F83ec46b5F9133E'
   const involica = (await ethers.getContractAt('Involica', involicaAddress)) as Involica
 
   const tokenIn = (await involica.fetchUserPosition(signer.address)).tokenIn
