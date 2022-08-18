@@ -1,11 +1,19 @@
 import { ethers } from 'hardhat'
-import { Involica, IERC20, InvolicaFetcher, Oracle, InvolicaResolver } from '../typechain'
+import { Involica, IERC20, InvolicaFetcher, Oracle } from '../typechain'
 import chai from 'chai'
 import { solidity } from 'ethereum-waffle'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
 import { ETH_TOKEN_ADDRESS, ROUTER_ADDRESS } from '../constants'
 import { BigNumber, BigNumberish } from '@ethersproject/bignumber'
-import { fastForwardTo, getCurrentTimestamp, setAllowedToken, setBlacklistedPair, parseGwei, prepare } from './utils'
+import {
+  fastForwardTo,
+  getCurrentTimestamp,
+  setAllowedToken,
+  setBlacklistedPair,
+  parseGwei,
+  prepare,
+  getExpectedLastDCA,
+} from './utils'
 import { parseEther } from '@ethersproject/units'
 
 const { expect } = chai
@@ -39,12 +47,12 @@ describe('Involica Position', function () {
   let btcSwapRoute: string[]
 
   let involica: Involica
-  let resolver: InvolicaResolver
+  // let resolver: InvolicaResolver
   let oracle: Oracle
   let fetcher: InvolicaFetcher
   // let ops: IOps
 
-  let emptyBytes32: string
+  // let emptyBytes32: string
   // let aliceResolverHash: string
 
   let snapshotId: string
@@ -73,11 +81,11 @@ describe('Involica Position', function () {
       wethSwapRoute,
       btcSwapRoute,
       involica,
-      resolver,
+      // resolver,
       oracle,
       fetcher,
       // ops,
-      emptyBytes32,
+      // emptyBytes32,
       // aliceResolverHash,
       snapshotId,
     } = await prepare(250))
@@ -132,6 +140,51 @@ describe('Involica Position', function () {
           true,
         ),
       ).to.be.revertedWith('Treasury must not be 0')
+    })
+    it('should succeed if treasury fund amount is 0, but treasury added with setPosition', async () => {
+      await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
+
+      await expect(
+        involica.connect(alice).setPosition(
+          alice.address,
+          usdc.address,
+          [
+            {
+              token: weth.address,
+              weight: 10000,
+              maxSlippage: defaultSlippage,
+            },
+          ],
+          defaultDCA,
+          defaultInterval,
+          defaultGasPrice,
+          true,
+          { value: defaultTreasuryFund },
+        ),
+      ).to.emit(involica, 'SetPosition')
+
+      const { userTreasury } = await fetcher.fetchUserData(alice.address)
+      expect(userTreasury).to.eq(defaultTreasuryFund)
+    })
+    it('should revert if maxGasPrice too low', async () => {
+      await setAllowedToken(involica, usdc.address, false)
+      await expect(
+        involica.connect(alice).setPosition(
+          alice.address,
+          usdc.address,
+          [
+            {
+              token: weth.address,
+              weight: 10000,
+              maxSlippage: defaultSlippage,
+            },
+          ],
+          defaultDCA,
+          defaultInterval,
+          1e9,
+          true,
+        ),
+      ).to.be.revertedWith('Max gas price must be >= 3 gwei')
     })
     it('should revert if token is not allowed', async () => {
       await setAllowedToken(involica, usdc.address, false)
@@ -412,6 +465,8 @@ describe('Involica Position', function () {
         true,
       )
 
+      const expectedLastDCA = await getExpectedLastDCA()
+
       expect(tx).to.changeEtherBalance(alice, 0)
       expect(tx).to.emit(involica, 'SetPosition')
 
@@ -428,10 +483,9 @@ describe('Involica Position', function () {
       expect(position.outs[0].maxSlippage).to.be.eq(defaultSlippage)
       expect(position.amountDCA).to.be.eq(defaultDCA)
       expect(position.intervalDCA).to.be.eq(defaultInterval)
-      expect(position.maxGasPrice).to.be.eq(parseGwei(defaultGasPrice))
-      expect(position.lastDCA).to.be.eq(0)
+      expect(position.maxGasPrice).to.be.eq(defaultGasPrice)
+      expect(position.lastDCA).to.be.eq(expectedLastDCA)
       expect(position.taskId).to.exist
-      expect(position.finalizationReason).to.equal('')
     })
     it('user should be added to usersWithPositions when position added', async () => {
       const userHasPositionBefore = (await fetcher.fetchUserData(alice.address)).userHasPosition
@@ -456,90 +510,6 @@ describe('Involica Position', function () {
       const userHasPositionAfter = (await fetcher.fetchUserData(alice.address)).userHasPosition
       expect(userHasPositionAfter).to.be.true
     })
-  })
-
-  describe('reInitPosition()', async () => {
-    beforeEach(async () => {
-      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
-    })
-
-    it('should revert if user doesnt exist', async function () {
-      await expect(involica.connect(alice).reInitPosition(true)).to.be.revertedWith('User doesnt have a position')
-    })
-    it('should revert if task already exists', async function () {
-      await involica.connect(alice).setPosition(
-        alice.address,
-        usdc.address,
-        [
-          {
-            token: weth.address,
-            weight: 10000,
-            maxSlippage: defaultSlippage,
-          },
-        ],
-        defaultDCA,
-        defaultInterval,
-        defaultGasPrice,
-        true,
-      )
-
-      await expect(involica.connect(alice).reInitPosition(true)).to.be.revertedWith('Task already initialized')
-    })
-    it('should revert if 0 balance treasury', async function () {
-      await involica.connect(alice).setPosition(
-        alice.address,
-        usdc.address,
-        [
-          {
-            token: weth.address,
-            weight: 10000,
-            maxSlippage: defaultSlippage,
-          },
-        ],
-        defaultDCA,
-        defaultInterval,
-        defaultGasPrice,
-        true,
-      )
-      await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
-
-      await expect(involica.connect(alice).reInitPosition(true)).to.be.revertedWith('Treasury must not be 0')
-    })
-    it('should succeed if conditions met', async function () {
-      await involica.connect(alice).setPosition(
-        alice.address,
-        usdc.address,
-        [
-          {
-            token: weth.address,
-            weight: 10000,
-            maxSlippage: defaultSlippage,
-          },
-        ],
-        defaultDCA,
-        defaultInterval,
-        defaultGasPrice,
-        true,
-      )
-      const taskId0 = (await fetcher.fetchUserData(alice.address)).position.taskId
-      await usdc.connect(alice).approve(involica.address, 0)
-      await expect(involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0]))
-        .to.emit(involica, 'FinalizeTask')
-        .withArgs(alice.address, taskId0, 'Insufficient approval to pull from wallet')
-
-      const taskIdInit = (await fetcher.fetchUserData(alice.address)).position.taskId
-      expect(taskIdInit).to.be.eq(emptyBytes32)
-
-      await usdc.connect(alice).approve(involica.address, ethers.constants.MaxUint256)
-      const tx = await involica.connect(alice).reInitPosition(true)
-
-      const taskIdFinal = (await fetcher.fetchUserData(alice.address)).position.taskId
-      expect(tx).to.emit(involica, 'InitializeTask').withArgs(alice.address, taskIdFinal)
-
-      expect(taskIdFinal).to.not.be.null
-    })
-
-    // Remaining tests carried out in Gelato Integration
   })
 
   describe('setPosition() multiple out tokens', async () => {
@@ -599,6 +569,8 @@ describe('Involica Position', function () {
       expect(tx).to.emit(involica, 'SetPosition')
       expect(tx).to.emit(involica, 'InitializeTask')
 
+      const expectedLastDCA = await getExpectedLastDCA()
+
       const balanceAliceAfter = await usdc.balanceOf(alice.address)
       const balanceContractAfter = await usdc.balanceOf(involica.address)
 
@@ -617,10 +589,9 @@ describe('Involica Position', function () {
       expect(position.outs[1].maxSlippage).to.be.eq(defaultSlippage)
       expect(position.amountDCA).to.be.eq(defaultDCA)
       expect(position.intervalDCA).to.be.eq(defaultInterval)
-      expect(position.maxGasPrice).to.be.eq(parseGwei(defaultGasPrice))
-      expect(position.lastDCA).to.be.eq(0)
+      expect(position.maxGasPrice).to.be.eq(defaultGasPrice)
+      expect(position.lastDCA).to.be.eq(expectedLastDCA)
       expect(position.taskId).to.exist
-      expect(position.finalizationReason).to.equal('')
     })
   })
 
@@ -654,13 +625,11 @@ describe('Involica Position', function () {
       await expect(involica.connect(deployer).exitPosition()).to.be.revertedWith('User doesnt have a position')
     })
     it('should exit successfully', async () => {
-      const { taskId } = (await fetcher.fetchUserData(alice.address)).position
       await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute, btcSwapRoute], [0, 0], [0, 0])
 
       const tx = await involica.connect(alice).exitPosition()
 
       expect(tx).to.emit(involica, 'WithdrawTreasury').withArgs(alice.address, defaultTreasuryFund)
-      expect(tx).to.emit(involica, 'FinalizeTask').withArgs(alice.address, taskId, 'User exited')
       expect(tx).to.emit(involica, 'ExitPosition')
 
       // Treasury should move back to user's wallet
@@ -668,8 +637,9 @@ describe('Involica Position', function () {
       expect(tx).to.changeEtherBalance(alice, defaultTreasuryFund)
 
       // Position should no longer exist
-      const userHasPositionAfter = (await fetcher.fetchUserData(alice.address)).userHasPosition
+      const { userHasPosition: userHasPositionAfter, position } = await fetcher.fetchUserData(alice.address)
       expect(userHasPositionAfter).to.be.false
+      expect(position.lastDCA).to.eq(0)
     })
     it('functions requiring position should fail after exit', async function () {
       await involica.connect(alice).exitPosition()
@@ -698,6 +668,12 @@ describe('Involica Position', function () {
       )
     })
 
+    it('should revert if system is paused', async () => {
+      await involica.connect(deployer).setPaused(true)
+      await expect(
+        involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0]),
+      ).to.be.revertedWith('Pausable: paused')
+    })
     it('should revert if position does not exist', async () => {
       await expect(
         involica.connect(opsSigner).executeDCA(bob.address, 1e6, [wethSwapRoute], [0], [0]),
@@ -708,11 +684,12 @@ describe('Involica Position', function () {
         involica.connect(alice).executeDCA(deployer.address, 1e6, [wethSwapRoute], [0], [0]),
       ).to.be.revertedWith('Only GelatoOps or User can Execute DCA')
     })
-    it('should revert if system is paused', async () => {
-      await involica.connect(deployer).setPaused(true)
+    it('should revert if gas too expensive', async () => {
       await expect(
-        involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0]),
-      ).to.be.revertedWith('Pausable: paused')
+        involica
+          .connect(opsSigner)
+          .executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0], { gasPrice: parseGwei(150), gasLimit: 2000000 }),
+      ).to.be.revertedWith('Gas too expensive')
     })
     it('should not decrease user input balance if swap fails', async () => {
       const aliceBalanceInBefore = await usdc.balanceOf(alice.address)
@@ -781,9 +758,7 @@ describe('Involica Position', function () {
     it('should revert until DCA matures', async () => {
       await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])
 
-      const currentTimestamp = await getCurrentTimestamp()
       const lastDCA = (await fetcher.fetchUserData(alice.address)).position.lastDCA
-      expect(lastDCA).to.be.eq(currentTimestamp)
 
       await expect(
         involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0]),
@@ -805,6 +780,37 @@ describe('Involica Position', function () {
 
       await expect(involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])).to.not.be
         .reverted
+    })
+    it('DCA execution time should not drift', async () => {
+      await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])
+      const lastDCA = (await fetcher.fetchUserData(alice.address)).position.lastDCA
+
+      await fastForwardTo(Number(lastDCA) + Number(defaultInterval) + 10)
+      await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])
+
+      await fastForwardTo(Number(lastDCA) + Number(defaultInterval) * 2 + 30)
+      await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])
+
+      await fastForwardTo(Number(lastDCA) + Number(defaultInterval) * 3 + 2)
+      await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])
+
+      await fastForwardTo(Number(lastDCA) + Number(defaultInterval) * 4 + 20)
+      await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])
+      const lastDCAFinal = (await fetcher.fetchUserData(alice.address)).position.lastDCA
+
+      expect(lastDCAFinal).to.eq(Number(lastDCA) + Number(defaultInterval) * 4)
+    })
+    it('DCA execution time should snap to current if more than 2 intervals have passed', async () => {
+      await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])
+      const lastDCA = (await fetcher.fetchUserData(alice.address)).position.lastDCA
+
+      await fastForwardTo(Number(lastDCA) + Number(defaultInterval) * 2 + 35)
+      await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])
+      const currentTimestamp = await getCurrentTimestamp()
+      const lastDCAFinal = (await fetcher.fetchUserData(alice.address)).position.lastDCA
+
+      expect(lastDCAFinal).to.be.gt(Number(lastDCA) + Number(defaultInterval) * 2 + 35)
+      expect(lastDCAFinal).to.eq(currentTimestamp)
     })
     it('Updating position should not change lastDCA or taskId', async () => {
       const { taskId, lastDCA } = (await fetcher.fetchUserData(alice.address)).position
@@ -902,7 +908,9 @@ describe('Involica Position', function () {
       await fastForwardTo(nextDCA.toNumber())
 
       const swapAmounts2 = await uniRouter.getAmountsOut(dcaAmount.mul(9995).div(10000), [usdc.address, weth.address])
-      await expect(involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])).to.emit(
+
+      // ALSO TESTS MANUAL EXECUTION
+      await expect(involica.connect(alice).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])).to.emit(
         involica,
         'FinalizeDCA',
       )
@@ -926,7 +934,6 @@ describe('Involica Position', function () {
       const txs = await involica.fetchUserTxs(alice.address)
       expect(txs.length).to.eq(3)
 
-      expect(txs[0].timestamp).to.eq(lastDCA)
       expect(txs[0].txFee).to.eq(defaultFee)
       expect(txs[0].tokenTxs.length).to.eq(1)
       expect(txs[0].tokenTxs[0].tokenIn).to.eq(usdc.address)
@@ -935,7 +942,6 @@ describe('Involica Position', function () {
       expect(txs[0].tokenTxs[0].amountOut).to.eq(wethDifference1)
       expect(txs[0].tokenTxs[0].err).to.eq('')
 
-      expect(txs[1].timestamp).to.eq(nextDCA.add(1))
       expect(txs[1].txFee).to.eq(defaultFee)
       expect(txs[1].tokenTxs.length).to.eq(1)
       expect(txs[1].tokenTxs[0].tokenIn).to.eq(usdc.address)
@@ -944,7 +950,6 @@ describe('Involica Position', function () {
       expect(txs[1].tokenTxs[0].amountOut).to.eq(wethDifference2)
       expect(txs[1].tokenTxs[0].err).to.eq('')
 
-      expect(txs[2].timestamp).to.eq(finalDCA.add(1))
       expect(txs[2].txFee).to.eq(0)
       expect(txs[2].tokenTxs.length).to.eq(1)
       expect(txs[2].tokenTxs[0].tokenIn).to.eq(usdc.address)
@@ -986,7 +991,6 @@ describe('Involica Position', function () {
         .connect(opsSigner)
         .executeDCA(alice.address, 1e6, [wethSwapRoute, btcSwapRoute], [0, 0], outPrices)
 
-      const { lastDCA } = (await fetcher.fetchUserData(alice.address)).position
       const wethBalanceAfter = await weth.balanceOf(alice.address)
       const wbtcBalanceAfter = await wbtc.balanceOf(alice.address)
 
@@ -994,7 +998,6 @@ describe('Involica Position', function () {
       const txs = await involica.fetchUserTxs(alice.address)
       expect(txs.length).to.eq(1)
 
-      expect(txs[0].timestamp).to.eq(lastDCA)
       expect(txs[0].tokenIn).to.eq(usdc.address)
       expect(txs[0].txFee).to.eq(defaultFee)
       expect(txs[0].tokenTxs.length).to.eq(2)
@@ -1060,7 +1063,6 @@ describe('Involica Position', function () {
         .connect(opsSigner)
         .executeDCA(alice.address, 1e6, [wethSwapRoute, btcSwapRoute], [0, parseEther('10000000000000')], [0, 0])
 
-      const { lastDCA } = (await fetcher.fetchUserData(alice.address)).position
       const balanceInAfter = await usdc.balanceOf(alice.address)
       const wethBalanceAfter = await weth.balanceOf(alice.address)
 
@@ -1071,7 +1073,6 @@ describe('Involica Position', function () {
       const txs = await involica.fetchUserTxs(alice.address)
       expect(txs.length).to.eq(1)
 
-      expect(txs[0].timestamp).to.eq(lastDCA)
       expect(txs[0].tokenTxs.length).to.eq(2)
 
       expect(txs[0].tokenTxs[0].tokenIn).to.eq(usdc.address)
@@ -1149,7 +1150,6 @@ describe('Involica Position', function () {
         .connect(opsSigner)
         .executeDCA(alice.address, 1e6, [wethSwapRoute, btcSwapRoute], [0, parseEther('10000000000000')], [0, 0])
 
-      const { lastDCA } = (await fetcher.fetchUserData(alice.address)).position
       const balanceInAfter = await usdc.balanceOf(alice.address)
       const wethBalanceAfter = await weth.balanceOf(alice.address)
 
@@ -1160,7 +1160,6 @@ describe('Involica Position', function () {
       const txs = await involica.fetchUserTxs(alice.address)
       expect(txs.length).to.eq(1)
 
-      expect(txs[0].timestamp).to.eq(lastDCA)
       expect(txs[0].txFee).to.eq(defaultFee.mul(2000).div(10000))
       expect(txs[0].tokenTxs.length).to.eq(2)
 

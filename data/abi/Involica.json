@@ -489,6 +489,35 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_opsFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "dcaRevertCondition",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "reverted",
+        "type": "bool"
+      },
+      {
+        "internalType": "string",
+        "name": "revertMsg",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "depositTreasury",
     "outputs": [],
@@ -653,11 +682,6 @@
             "internalType": "bytes32",
             "name": "taskId",
             "type": "bytes32"
-          },
-          {
-            "internalType": "string",
-            "name": "finalizationReason",
-            "type": "string"
           },
           {
             "internalType": "address",
@@ -889,30 +913,12 @@
         "type": "bytes32"
       },
       {
-        "internalType": "string",
-        "name": "finalizationReason",
-        "type": "string"
-      },
-      {
         "internalType": "address",
         "name": "recipient",
         "type": "address"
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bool",
-        "name": "_executeImmediately",
-        "type": "bool"
-      }
-    ],
-    "name": "reInitPosition",
-    "outputs": [],
-    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -1080,7 +1086,7 @@
     ],
     "name": "setPosition",
     "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {

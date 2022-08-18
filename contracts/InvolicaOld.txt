@@ -442,7 +442,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             ) {
                 _finalizeTask(
                     _position,
-                    "Insufficient approval to pull from wallet"
+                    "Insufficient allowance"
                 );
                 return true;
             }
@@ -454,7 +454,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             ) {
                 _finalizeTask(
                     _position,
-                    "Insufficient funds to pull from wallet"
+                    "Insufficient balance"
                 );
                 return true;
             }

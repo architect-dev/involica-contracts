@@ -24,49 +24,11 @@ contract InvolicaResolver is IInvolicaResolver {
         owner = msg.sender;
     }
 
-    function fetchPositionExecConditions(address _user)
-        external
-        view
-        returns (
-            bool canExec,
-            string memory reason,
-            bool hasPosition,
-            uint256 timeRemaining,
-            uint256 gasPrice
-        )
-    {
-        IInvolica.Position memory position = involica.fetchUserPosition(_user);
-
-        if (position.user != _user || position.taskId == bytes32(0))
-            return (false, 'User doesnt have a position', false, 0, 0);
-
-        hasPosition = true;
-        timeRemaining = position.lastDCA == 0 || block.timestamp >= (position.lastDCA + position.intervalDCA)
-            ? 0
-            : (position.lastDCA + position.intervalDCA) - block.timestamp;
-        gasPrice = tx.gasprice;
-
-        if (timeRemaining > 0) {
-            canExec = false;
-            reason = 'DCA not mature';
-        } else if (position.maxGasPrice > 0 && gasPrice > position.maxGasPrice) {
-            canExec = false;
-            reason = 'Gas too expensive';
-        } else {
-            canExec = true;
-            reason = '';
-        }
-    }
-
     function checkPositionExecutable(address _user) external view returns (bool canExec, bytes memory execPayload) {
-        IInvolica.Position memory position = involica.fetchUserPosition(_user);
+        (bool reverted, string memory revertMsg) = involica.dcaRevertCondition(_user, 0);
+        if (reverted) return (false, bytes(revertMsg));
 
-        if (position.user != _user || position.taskId == bytes32(0))
-            return (false, bytes('User doesnt have a position'));
-        if ((block.timestamp < (position.lastDCA + position.intervalDCA)) && position.lastDCA != 0)
-            return (false, bytes('DCA not mature'));
-        if (position.maxGasPrice > 0 && tx.gasprice > position.maxGasPrice) return (false, bytes('Gas too expensive'));
-        canExec = true;
+        IInvolica.Position memory position = involica.fetchUserPosition(_user);
 
         (uint256 tokenInPrice, ) = oracle.getPriceUsdc(position.tokenIn);
 
@@ -82,13 +44,16 @@ contract InvolicaResolver is IInvolicaResolver {
             (outPrices[i], ) = oracle.getPriceUsdc(position.outs[i].token);
         }
 
-        execPayload = abi.encodeWithSelector(
-            IInvolica.executeDCA.selector,
-            _user,
-            tokenInPrice,
-            swapsRoutes,
-            swapsAmountOutMin,
-            outPrices
+        return (
+            true,
+            abi.encodeWithSelector(
+                IInvolica.executeDCA.selector,
+                _user,
+                tokenInPrice,
+                swapsRoutes,
+                swapsAmountOutMin,
+                outPrices
+            )
         );
     }
 }

@@ -92,7 +92,7 @@ export const prepare = async (chainId: number): Promise<ThisObject> => {
   thisObject.defaultInterval = 60 // second;
   thisObject.wethSwapRoute = [thisObject.usdc.address, thisObject.weth.address]
   thisObject.btcSwapRoute = [thisObject.usdc.address, thisObject.weth.address, thisObject.wbtc.address]
-  thisObject.defaultGasPrice = 100
+  thisObject.defaultGasPrice = 100e9 // 100 gwei
   thisObject.defaultGelatoFee = parseEther('0.05')
 
   // Fill Wallets
@@ -209,6 +209,12 @@ export const getCurrentTimestamp = async (): Promise<BigNumber> => {
 export const fastForwardTo = async (timestamp: number): Promise<void> => {
   await ethers.provider.send('evm_setNextBlockTimestamp', [timestamp])
   await ethers.provider.send('evm_mine', [])
+}
+
+export const getExpectedLastDCA = async (): Promise<number> => {
+  const currentTimestamp = await getCurrentTimestamp()
+  const lastDCA = currentTimestamp.sub(60)
+  return lastDCA.toNumber()
 }
 
 export const impersonateAndFund = async (address: string): Promise<SignerWithAddress> => {

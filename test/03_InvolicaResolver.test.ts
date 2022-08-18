@@ -121,10 +121,6 @@ describe('Involica Resolver', function () {
       expect(canExec).to.be.eq(false)
 
       expect(toUtf8String(payload)).to.be.eq('User doesnt have a position')
-
-      const { canExec: canExecExecCheck, reason } = await resolver.fetchPositionExecConditions(alice.address)
-      expect(canExecExecCheck).to.eq(false)
-      expect(reason).to.eq('User doesnt have a position')
     })
     it('should return false if user position not mature', async () => {
       await involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute, btcSwapRoute], [0, 0], [0, 0])
@@ -133,10 +129,6 @@ describe('Involica Resolver', function () {
       expect(canExec).to.be.eq(false)
 
       expect(toUtf8String(payload)).to.be.eq('DCA not mature')
-
-      const { canExec: canExecExecCheck, reason } = await resolver.fetchPositionExecConditions(alice.address)
-      expect(canExecExecCheck).to.eq(false)
-      expect(reason).to.eq('DCA not mature')
     })
     it('should return false if gas price is too expensive', async () => {
       const [canExec, payload] = await resolver.checkPositionExecutable(alice.address, {
@@ -145,19 +137,10 @@ describe('Involica Resolver', function () {
       expect(canExec).to.be.eq(false)
 
       expect(toUtf8String(payload)).to.be.eq('Gas too expensive')
-
-      const { canExec: canExecExecCheck, reason } = await resolver.fetchPositionExecConditions(alice.address, {
-        gasPrice: parseGwei(defaultGasPrice).mul(2),
-      })
-      expect(canExecExecCheck).to.eq(false)
-      expect(reason).to.eq('Gas too expensive')
     })
     it('should return true if position is ready', async () => {
       const [canExec] = await resolver.checkPositionExecutable(alice.address)
       expect(canExec).to.be.eq(true)
-
-      const { canExec: canExecExecCheck } = await resolver.fetchPositionExecConditions(alice.address)
-      expect(canExecExecCheck).to.eq(true)
     })
     it('should return correct swapsAmountOutMins', async () => {
       const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)

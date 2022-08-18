@@ -14,7 +14,6 @@ interface IInvolica {
         uint256 lastDCA;
         uint256 maxGasPrice;
         bytes32 taskId;
-        string finalizationReason;
         address recipient;
     }
     struct PositionOut {
@@ -96,6 +95,7 @@ interface IInvolica {
     function fetchUserTreasury(address user) external view returns (uint256);
     function fetchUserPosition(address user) external view returns (Position memory);
     function fetchUserTxs(address user) external view returns (UserTx[] memory);
+    function dcaRevertCondition(address user, uint256 _opsFee) external view returns (bool reverted, string memory revertMsg);
 
     // Callable
     function executeDCA(address, uint256 tokenInPrice, address[][] calldata swapsRoutes, uint256[] calldata swapsAmountOutMin, uint256[] calldata outPrices) external;

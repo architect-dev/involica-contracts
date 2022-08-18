@@ -5,7 +5,7 @@ import { solidity } from 'ethereum-waffle'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
 import { ETH_TOKEN_ADDRESS } from '../constants'
 import { BigNumber, BigNumberish } from '@ethersproject/bignumber'
-import { fastForwardTo, getCurrentTimestamp, prepare } from './utils'
+import { fastForwardTo, getCurrentTimestamp, parseGwei, prepare } from './utils'
 
 const { expect } = chai
 chai.use(solidity)
@@ -43,7 +43,7 @@ describe('Integration Test: Gelato DCA', function () {
   let fetcher: InvolicaFetcher
   let ops: IOps
 
-  let emptyBytes32: string
+  // let emptyBytes32: string
   let aliceResolverHash: string
 
   let snapshotId: string
@@ -76,7 +76,7 @@ describe('Integration Test: Gelato DCA', function () {
       // oracle,
       fetcher,
       ops,
-      emptyBytes32,
+      // emptyBytes32,
       aliceResolverHash,
       snapshotId,
     } = await prepare(250))
@@ -88,7 +88,7 @@ describe('Integration Test: Gelato DCA', function () {
   })
 
   describe('Gelato DCA fromWallet', async () => {
-    it('should DCA until approval runs out, then finalize with "Insufficient approval to pull from wallet"', async () => {
+    it('should DCA until approval runs out, then finalize with "Insufficient allowance"', async () => {
       await usdc.connect(alice).approve(involica.address, defaultFund)
       await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
       await involica.connect(alice).setPosition(
@@ -112,9 +112,9 @@ describe('Integration Test: Gelato DCA', function () {
       const aliceUsdcApprovalBefore = await usdc.allowance(alice.address, involica.address)
       const aliceWethBefore = await weth.balanceOf(alice.address)
 
-      let finalizationReason = ''
+      let dcaRevertReason = ''
       let iteration = 0
-      while (iteration < 15 && finalizationReason !== 'Insufficient approval to pull from wallet') {
+      while (iteration < 15 && dcaRevertReason !== 'Insufficient allowance') {
         const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)
         expect(canExec).to.be.eq(true)
 
@@ -134,14 +134,11 @@ describe('Integration Test: Gelato DCA', function () {
         const now = await getCurrentTimestamp()
         await fastForwardTo(now.add(defaultInterval).toNumber())
 
-        const position = (await fetcher.fetchUserData(alice.address)).position
-        finalizationReason = position.finalizationReason
+        dcaRevertReason = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
         iteration++
       }
 
-      const position = (await fetcher.fetchUserData(alice.address)).position
-      expect(position.finalizationReason).to.be.eq('Insufficient approval to pull from wallet')
-      expect(position.taskId).to.be.eq(emptyBytes32)
+      expect(dcaRevertReason).to.be.eq('Insufficient allowance')
 
       const involicaUsdcAfter = await usdc.balanceOf(involica.address)
       const involicaWethAfter = await weth.balanceOf(involica.address)
@@ -177,33 +174,25 @@ describe('Integration Test: Gelato DCA', function () {
         defaultGasPrice,
         true,
       )
+
+      // Position should not have a revert reason
+      const reason0 = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
+      expect(reason0).to.be.eq('')
+
+      // Set approved to 0
       await usdc.connect(alice).approve(involica.address, 0)
 
-      // Finalize task with no approval
-      const payload = (await resolver.checkPositionExecutable(alice.address))[1]
-      await ops
-        .connect(opsGelatoSigner)
-        .exec(
-          defaultGelatoFee.div(2),
-          ETH_TOKEN_ADDRESS,
-          involica.address,
-          false,
-          true,
-          aliceResolverHash,
-          involica.address,
-          payload,
-        )
-
-      // Should fail to reInit without approval
-      await expect(involica.connect(alice).reInitPosition(true)).to.be.revertedWith('Approve for at least 1 DCA')
+      // Should throw insufficient allowance
+      const reason1 = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
+      expect(reason1).to.be.eq('Insufficient allowance')
 
       // Approve more funds, reInit should be successful
       await usdc.connect(alice).approve(involica.address, defaultFund.mul(1000))
 
-      const tx = await involica.connect(alice).reInitPosition(true)
-      expect(tx).to.emit(involica, 'InitializeTask')
+      const reason2 = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
+      expect(reason2).to.be.eq('')
     })
-    it('should DCA until wallet balance runs out, then finalize with "Insufficient funds to pull from wallet"', async () => {
+    it('should DCA until wallet balance runs out, then finalize with "Insufficient balance"', async () => {
       const aliceUsdcInit = await usdc.balanceOf(alice.address)
       await usdc.connect(alice).transfer(bob.address, aliceUsdcInit.sub(defaultFund))
       await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
@@ -228,9 +217,9 @@ describe('Integration Test: Gelato DCA', function () {
       const aliceUsdcBefore = await usdc.balanceOf(alice.address)
       const aliceWethBefore = await weth.balanceOf(alice.address)
 
-      let finalizationReason = ''
+      let dcaRevertReason = ''
       let iteration = 0
-      while (iteration < 15 && finalizationReason !== 'Insufficient funds to pull from wallet') {
+      while (iteration < 15 && dcaRevertReason !== 'Insufficient balance') {
         const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)
         expect(canExec).to.be.eq(true)
 
@@ -250,14 +239,11 @@ describe('Integration Test: Gelato DCA', function () {
         const now = await getCurrentTimestamp()
         await fastForwardTo(now.add(defaultInterval).toNumber())
 
-        const position = (await fetcher.fetchUserData(alice.address)).position
-        finalizationReason = position.finalizationReason
+        dcaRevertReason = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
         iteration++
       }
 
-      const position = (await fetcher.fetchUserData(alice.address)).position
-      expect(position.finalizationReason).to.be.eq('Insufficient funds to pull from wallet')
-      expect(position.taskId).to.be.eq(emptyBytes32)
+      expect(dcaRevertReason).to.be.eq('Insufficient balance')
 
       const involicaUsdcAfter = await usdc.balanceOf(involica.address)
       const involicaWethAfter = await weth.balanceOf(involica.address)
@@ -294,31 +280,23 @@ describe('Integration Test: Gelato DCA', function () {
         defaultGasPrice,
         true,
       )
+
+      // Position should not have a revert reason
+      const reason0 = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
+      expect(reason0).to.be.eq('')
+
+      // Set balance to 0
       await usdc.connect(alice).transfer(bob.address, aliceUsdcInit)
 
-      // Finalize task with no wallet balance
-      const payload = (await resolver.checkPositionExecutable(alice.address))[1]
-      await ops
-        .connect(opsGelatoSigner)
-        .exec(
-          defaultGelatoFee.div(2),
-          ETH_TOKEN_ADDRESS,
-          involica.address,
-          false,
-          true,
-          aliceResolverHash,
-          involica.address,
-          payload,
-        )
-
-      // Revert with no wallet balance
-      await expect(involica.connect(alice).reInitPosition(true)).to.be.revertedWith('Wallet balance for at least 1 DCA')
+      // Should throw insufficient allowance
+      const reason1 = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
+      expect(reason1).to.be.eq('Insufficient balance')
 
       // Give balance and reInit
       await usdc.connect(bob).transfer(alice.address, defaultFund)
 
-      const tx = await involica.connect(alice).reInitPosition(true)
-      expect(tx).to.emit(involica, 'InitializeTask')
+      const reason2 = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
+      expect(reason2).to.be.eq('')
     })
     it('should DCA until treasury runs out, then finalize with Treasury out of gas', async () => {
       await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
@@ -338,19 +316,22 @@ describe('Integration Test: Gelato DCA', function () {
         true,
       )
 
+      const gasEstimation = ((450000 + 1 * 195000) * parseGwei(100).toNumber()).toString()
+
       const balanceBeforeUsdc = await usdc.balanceOf(alice.address)
       const balanceBeforeWeth = await weth.balanceOf(alice.address)
 
-      let finalizationReason = ''
+      let dcaRevertReason = ''
       let iteration = 0
-      while (iteration < 15 && finalizationReason !== 'Treasury out of gas') {
+      while (iteration < 15 && dcaRevertReason !== 'Treasury out of gas') {
         const [canExec, payload] = await resolver.checkPositionExecutable(alice.address)
+
         expect(canExec).to.be.eq(true)
 
         const tx = await ops
           .connect(opsGelatoSigner)
           .exec(
-            defaultGelatoFee.mul(2),
+            gasEstimation,
             ETH_TOKEN_ADDRESS,
             involica.address,
             false,
@@ -363,24 +344,22 @@ describe('Integration Test: Gelato DCA', function () {
         const now = await getCurrentTimestamp()
         await fastForwardTo(now.add(defaultInterval).toNumber())
 
-        const position = (await fetcher.fetchUserData(alice.address)).position
-        finalizationReason = position.finalizationReason
+        dcaRevertReason = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
         iteration++
 
-        if (finalizationReason == '') {
-          expect(tx).to.changeEtherBalance(involica, defaultGelatoFee.mul(-2))
+        if (dcaRevertReason == '') {
+          expect(tx).to.changeEtherBalance(involica, BigNumber.from(gasEstimation).mul(-1))
         }
       }
 
-      const { position, userTreasury } = await fetcher.fetchUserData(alice.address)
-      expect(position.finalizationReason).to.be.eq('Treasury out of gas')
-      expect(userTreasury).to.be.eq(0)
-      expect(position.taskId).to.be.eq(emptyBytes32)
+      const { userTreasury } = await fetcher.fetchUserData(alice.address)
+      expect(dcaRevertReason).to.be.eq('Treasury out of gas')
+      expect(userTreasury).to.be.lt(gasEstimation)
 
       const balanceAfterUsdc = await usdc.balanceOf(alice.address)
       const balanceAfterWeth = await weth.balanceOf(alice.address)
 
-      expect(balanceBeforeUsdc.sub(balanceAfterUsdc)).to.be.eq(defaultDCA.mul(iteration - 1))
+      expect(balanceBeforeUsdc.sub(balanceAfterUsdc)).to.be.eq(defaultDCA.mul(iteration))
       expect(balanceAfterWeth.sub(balanceBeforeWeth)).to.be.gt(0)
     })
     it('depositing treasury funds should re-initialize task', async () => {
@@ -403,17 +382,16 @@ describe('Integration Test: Gelato DCA', function () {
       )
       await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
 
-      const position1 = (await fetcher.fetchUserData(alice.address)).position
-      expect(position1.finalizationReason).to.be.eq('Treasury out of gas')
+      const dcaRevertReason1 = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
+      expect(dcaRevertReason1).to.be.eq('Treasury out of gas')
 
       // Re-initialize
       const tx = await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
 
       expect(tx).to.emit(involica, 'DepositTreasury').withArgs(alice.address, defaultTreasuryFund)
-      expect(tx).to.emit(involica, 'InitializeTask')
 
-      const position2 = (await fetcher.fetchUserData(alice.address)).position
-      expect(position2.finalizationReason).to.be.eq('')
+      const dcaRevertReason2 = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
+      expect(dcaRevertReason2).to.be.eq('')
 
       const now = await getCurrentTimestamp()
       await fastForwardTo(now.add(defaultInterval).toNumber())
@@ -455,8 +433,8 @@ describe('Integration Test: Gelato DCA', function () {
       )
       await involica.connect(alice).withdrawTreasury(defaultTreasuryFund)
 
-      const position1 = (await fetcher.fetchUserData(alice.address)).position
-      expect(position1.finalizationReason).to.be.eq('Treasury out of gas')
+      const dcaRevertReason1 = (await fetcher.fetchUserData(alice.address)).dcaRevertReason
+      expect(dcaRevertReason1).to.be.eq('Treasury out of gas')
 
       // Set Insufficient allowance and balance
       await usdc.connect(alice).approve(involica.address, 0)
@@ -464,34 +442,19 @@ describe('Integration Test: Gelato DCA', function () {
       expect(await usdc.allowance(alice.address, involica.address)).to.be.eq(0)
       expect(await usdc.balanceOf(alice.address)).to.be.eq(0)
 
-      const taskId0 = (await fetcher.fetchUserData(alice.address)).position.taskId
-      expect(taskId0).to.eq(emptyBytes32)
-
-      // Deposit treasury should not re-initialize task
-      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
-
-      const taskId1 = (await fetcher.fetchUserData(alice.address)).position.taskId
-      expect(taskId1).to.eq(emptyBytes32)
+      expect((await fetcher.fetchUserData(alice.address)).dcaRevertReason).to.equal('Insufficient allowance')
 
       // Set Sufficient allowance
       await usdc.connect(alice).approve(involica.address, defaultDCA)
+      expect((await fetcher.fetchUserData(alice.address)).dcaRevertReason).to.equal('Insufficient balance')
 
-      // Deposit treasury should not re-initialize task
-      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
-
-      const taskId2 = (await fetcher.fetchUserData(alice.address)).position.taskId
-      expect(taskId2).to.eq(emptyBytes32)
-
-      // Add Sufficient balance
+      // Set Sufficient balance
       await usdc.connect(bob).transfer(alice.address, await usdc.balanceOf(bob.address))
+      expect((await fetcher.fetchUserData(alice.address)).dcaRevertReason).to.equal('Treasury out of gas')
 
-      // Deposit treasury should re-initialize task
-      const tx = await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
-
-      const task3 = (await fetcher.fetchUserData(alice.address)).position.taskId
-      expect(task3).to.not.eq(emptyBytes32)
-
-      expect(tx).to.emit(involica, 'InitializeTask')
+      // Set Sufficient Treasury
+      await involica.connect(alice).depositTreasury({ value: defaultTreasuryFund })
+      expect((await fetcher.fetchUserData(alice.address)).dcaRevertReason).to.equal('')
     })
   })
 })

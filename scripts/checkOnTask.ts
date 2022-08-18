@@ -12,9 +12,9 @@ export const exitPosition = async (): Promise<void> => {
   const [resolverAdd] = readContractAddresses(chainId, ['resolver'])
   const resolver = (await ethers.getContractAt('InvolicaResolver', resolverAdd)) as InvolicaResolver
 
-  const execConditions = await resolver.fetchPositionExecConditions(signer.address)
+  // const execConditions = await resolver.fetchPositionExecConditions(signer.address)
 
-  console.log(execConditions)
+  // console.log(execConditions)
 }
 
 // We recommend this pattern to be able to use async/await everywhere

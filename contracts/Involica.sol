@@ -106,22 +106,28 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         userTreasuries[msg.sender] += msg.value;
 
         emit DepositTreasury(msg.sender, msg.value);
-
-        _checkAndInitializeTask(positions[msg.sender], false);
     }
 
     function withdrawTreasury(uint256 _amount) public nonReentrant {
         require(_amount > 0, '_amount must be > 0');
         require(_amount <= userTreasuries[msg.sender], 'Bad withdraw');
         _withdrawTreasury(_amount);
+    }
 
-        _checkAndFinalizeTask(positions[msg.sender], 0);
+    function exitPosition() public positionExists nonReentrant {
+        Position storage position = positions[msg.sender];
+        _withdrawTreasury(userTreasuries[msg.sender]);
+        position.user = address(0);
+        position.lastDCA = 0;
+
+        emit ExitPosition(msg.sender);
     }
 
     function _withdrawTreasury(uint256 _amount) internal {
         (bool success, ) = payable(msg.sender).call{value: _amount}('');
         require(success, 'ETH transfer failed');
         userTreasuries[msg.sender] -= _amount;
+
         emit WithdrawTreasury(msg.sender, _amount);
     }
 
@@ -135,8 +141,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         uint256 _intervalDCA,
         uint256 _maxGasPrice,
         bool _executeImmediately
-    ) public whenNotPaused nonReentrant {
-        require(userTreasuries[msg.sender] > 0, 'Treasury must not be 0');
+    ) public payable whenNotPaused nonReentrant {
+        require(userTreasuries[msg.sender] > 0 || msg.value > 0, 'Treasury must not be 0');
         require(_amountDCA > 0, 'DCA amount must be > 0');
         require(_intervalDCA >= 60, 'DCA interval must be >= 60s');
         require(_outs.length <= 8, 'No more than 8 out tokens');
@@ -150,6 +156,10 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         // Set Data
         position.user = msg.sender;
         position.tokenIn = _tokenIn;
+
+        if (msg.value != 0) {
+            userTreasuries[msg.sender] += msg.value;
+        }
 
         // Validate balance / approval + wallet balance can cover at least 1 DCA
         require(IERC20(_tokenIn).allowance(msg.sender, address(this)) >= _amountDCA, 'Approve for at least 1 DCA');
@@ -172,61 +182,28 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             require(_outs[i].maxSlippage >= minSlippage, 'Invalid slippage');
             require(_outs[i].weight > 0, 'Non zero weight');
             weightsSum += _outs[i].weight;
-            position.outs.push(
-                PositionOut({
-                    token: out,
-                    weight: _outs[i].weight,
-                    maxSlippage: _outs[i].maxSlippage
-                })
-            );
+            position.outs.push(PositionOut({token: out, weight: _outs[i].weight, maxSlippage: _outs[i].maxSlippage}));
         }
         require(weightsSum == 10_000, 'Weights do not sum to 10000');
 
-        emit SetPosition(msg.sender, position.recipient, _tokenIn, position.outs, _amountDCA, _intervalDCA, _maxGasPrice);
+        emit SetPosition(
+            msg.sender,
+            position.recipient,
+            _tokenIn,
+            position.outs,
+            _amountDCA,
+            _intervalDCA,
+            _maxGasPrice
+        );
 
         // New position needs to be initialized (must call from array of positions to persist taskId)
-        _checkAndInitializeTask(positions[msg.sender], _executeImmediately);
+        _initializeTask(positions[msg.sender]);
+        _bringLastDCACurrent(positions[msg.sender], _executeImmediately);
     }
 
-    function reInitPosition(bool _executeImmediately) public whenNotPaused positionExists nonReentrant {
-        Position storage position = positions[msg.sender];
-
-        require(position.taskId == bytes32(0), 'Task already initialized');
-        require(userTreasuries[msg.sender] > 0, 'Treasury must not be 0');
-        require(
-            IERC20(position.tokenIn).allowance(msg.sender, address(this)) >= position.amountDCA,
-            'Approve for at least 1 DCA'
-        );
-        require(
-            IERC20(position.tokenIn).balanceOf(msg.sender) >= position.amountDCA,
-            'Wallet balance for at least 1 DCA'
-        );
-
-        _checkAndInitializeTask(position, _executeImmediately);
-    }
-
-    function exitPosition() public positionExists nonReentrant {
-        Position storage position = positions[msg.sender];
-
-        // Remove treasury
-        _withdrawTreasury(userTreasuries[msg.sender]);
-
-        // Stop task
-        _finalizeTask(position, 'User exited');
-
-        // Clear data
-        position.user = address(0);
-
-        emit ExitPosition(msg.sender);
-    }
-
-    // TASK MANAGEMENT
-
-    function _checkAndInitializeTask(Position storage _position, bool _executeImmediately) internal {
-        if (_position.user == address(0)) return;
+    function _initializeTask(Position storage _position) internal {
+        // Early exit if task already exists
         if (_position.taskId != bytes32(0)) return;
-        if (IERC20(_position.tokenIn).allowance(_position.user, address(this)) < _position.amountDCA) return;
-        if (IERC20(_position.tokenIn).balanceOf(_position.user) < _position.amountDCA) return;
 
         _position.taskId = IOps(ops).createTimedTask(
             0,
@@ -239,89 +216,94 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             false
         );
 
-        _position.finalizationReason = '';
-        _position.lastDCA = _executeImmediately ? 0 : block.timestamp;
-
         emit InitializeTask(_position.user, _position.taskId);
     }
 
-    function _checkAndFinalizeTask(Position storage _position, uint256 _txFee) internal returns (bool finalize) {
-        // Funds must be approved for this contract
-        if (
-            _position.tokenIn != address(0) &&
-            IERC20(_position.tokenIn).allowance(_position.user, address(this)) < _position.amountDCA
-        ) {
-            _finalizeTask(_position, 'Insufficient approval to pull from wallet');
-            return true;
-        }
+    function _bringLastDCACurrent(Position storage _position, bool _executeImmediately) internal {
+        // Early exit if block.timestamp is already within last interval range
+        if (_position.lastDCA != 0 && block.timestamp >= (_position.lastDCA - _position.intervalDCA)) return;
 
-        // Must be enough funds for DCA
-        if (
-            _position.tokenIn != address(0) && IERC20(_position.tokenIn).balanceOf(_position.user) < _position.amountDCA
-        ) {
-            _finalizeTask(_position, 'Insufficient funds to pull from wallet');
-            return true;
-        }
-
-        if (userTreasuries[_position.user] == 0 || userTreasuries[_position.user] < _txFee) {
-            if (_txFee > 0) {
-                // Tx has fee, but isn't covered by user's treasury, empty to zero
-                userTreasuries[_position.user] = 0;
-            }
-
-            _finalizeTask(_position, 'Treasury out of gas');
-            return true;
-        }
-
-        return false;
-    }
-
-    function _finalizeTask(Position storage _position, string memory _reason) internal {
-        if (_position.taskId == bytes32(0)) return;
-
-        IOps(ops).cancelTask(_position.taskId);
-        emit FinalizeTask(_position.user, _position.taskId, _reason);
-
-        _position.taskId = bytes32(0);
-        _position.finalizationReason = _reason;
+        // If execute immediately, set lastDCA back to instantly mature position
+        _position.lastDCA = block.timestamp - (_executeImmediately ? _position.intervalDCA : 0);
     }
 
     // DCA EXECUTION
 
-    function executeDCA(address _user, uint256 tokenInPrice, address[][] calldata swapsRoutes, uint256[] calldata swapsAmountOutMin, uint256[] calldata outPrices)
+    function dcaRevertCondition(address _user, uint256 _opsFee)
         public
+        view
         override
-        whenNotPaused
-        nonReentrant
+        returns (bool reverted, string memory revertMsg)
     {
-        require(msg.sender == ops || msg.sender == _user, 'Only GelatoOps or User can Execute DCA');
+        return _dcaRevertCondition(_user, _opsFee);
+    }
 
+    function _dcaRevertCondition(address _user, uint256 _opsFee)
+        internal
+        view
+        returns (bool reverted, string memory revertMsg)
+    {
         Position storage position = positions[_user];
-        require(position.user == _user && _user != address(0), 'User doesnt have a position');
-        require(msg.sender == _user || block.timestamp >= position.lastDCA + position.intervalDCA, 'DCA not mature');
 
-        // Increment lastDCA to keep schedule
-        if (position.lastDCA == 0) {
-            position.lastDCA = block.timestamp;
-        } else {
-            position.lastDCA += position.intervalDCA;
+        if (_user == address(0) || position.user != _user) {
+            return (true, 'User doesnt have a position');
+        }
+        if (msg.sender != _user && block.timestamp < (position.lastDCA + position.intervalDCA)) {
+            return (true, 'DCA not mature');
+        }
+        if (position.maxGasPrice < tx.gasprice) {
+            return (true, 'Gas too expensive');
         }
 
-        // Validate extraData length
+        // Funds must be approved for this tx and the next tx
+        if (IERC20(position.tokenIn).allowance(position.user, address(this)) < position.amountDCA) {
+            return (true, 'Insufficient allowance');
+        }
+
+        // Must be enough wallet balance for this and the next tx
+        if (IERC20(position.tokenIn).balanceOf(position.user) < position.amountDCA) {
+            return (true, 'Insufficient balance');
+        }
+
+        if (_opsFee > 0) {
+            if (userTreasuries[position.user] < _opsFee) {
+                return (true, 'Treasury out of gas');
+            }
+        }
+
+        return (false, '');
+    }
+
+    function executeDCA(
+        address _user,
+        uint256 tokenInPrice,
+        address[][] calldata swapsRoutes,
+        uint256[] calldata swapsAmountOutMin,
+        uint256[] calldata outPrices
+    ) public override whenNotPaused nonReentrant {
+        require(msg.sender == ops || msg.sender == _user, 'Only GelatoOps or User can Execute DCA');
+        Position storage position = positions[_user];
+
+        uint256 opsFee;
+        if (msg.sender == ops) {
+            (opsFee, ) = IOps(ops).getFeeDetails();
+        }
+
+        (bool reverted, string memory revertMsg) = _dcaRevertCondition(_user, opsFee);
+        require(!reverted, revertMsg);
+
+        // Validate call data
         require(position.outs.length == swapsRoutes.length, 'Routes for swaps is invalid');
         require(position.outs.length == swapsAmountOutMin.length, 'AmountOut for swaps is invalid');
         require(position.outs.length == outPrices.length, 'OutPrices for swaps is invalid');
 
-        (uint256 fee, ) = IOps(ops).getFeeDetails();
-        _transfer(fee, NATIVE_TOKEN);
+        if (opsFee > 0) {
+            // Send Gelato Fee
+            _transfer(opsFee, NATIVE_TOKEN);
 
-        // Check if tx will fail or treasury won't cover gas
-        bool finalized = _checkAndFinalizeTask(position, fee);
-        // Exit if tx will fail
-        if (finalized) return;
-
-        // Take transaction fee out of users treasury
-        userTreasuries[_user] -= fee;
+            // Take transaction fee out of users treasury
+            userTreasuries[_user] -= opsFee;
+        }
 
         // Withdraw funds from user wallet for DCA
         _setupDCA(position);
@@ -335,13 +317,19 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     uint256 activeTxAmountSwapped = 0;
     uint256 activeTxFeeTaken = 0;
+
     function _setupDCA(Position storage position) internal {
         IERC20(position.tokenIn).safeTransferFrom(position.user, address(this), position.amountDCA);
         activeTxAmountSwapped = 0;
         activeTxFeeTaken = 0;
     }
 
-    function _executeDCASwaps(Position storage position, uint256 tokenInPrice, address[][] memory swapsRoutes, uint256[] memory swapsAmountOutMin) internal {
+    function _executeDCASwaps(
+        Position storage position,
+        uint256 tokenInPrice,
+        address[][] memory swapsRoutes,
+        uint256[] memory swapsAmountOutMin
+    ) internal {
         // Approve swap in amount
         IERC20(position.tokenIn).approve(address(uniRouter), position.amountDCA);
 
@@ -359,8 +347,13 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         bool swapErr;
         for (uint256 i = 0; i < position.outs.length; i++) {
             validPair = _validPair(position.tokenIn, position.outs[i].token);
-            validRoute = _validRoute(position.tokenIn, position.outs[i].token, position.amountDCA, position.outs[i].weight, swapsRoutes[i]);
-
+            validRoute = _validRoute(
+                position.tokenIn,
+                position.outs[i].token,
+                position.amountDCA,
+                position.outs[i].weight,
+                swapsRoutes[i]
+            );
 
             if (!validPair || !validRoute) {
                 userTx.tokenTxs.push(
@@ -375,7 +368,6 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
                 );
                 continue;
             }
-
 
             (amounts, swapErr, swapErrReason) = _swap(
                 position.recipient,
@@ -427,9 +419,9 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             string memory errReason
         )
     {
-        try
-            uniRouter.swapExactTokensForTokens(_amountIn, _amountOutMin, _path, _recipient, block.timestamp)
-        returns (uint256[] memory _amounts) {
+        try uniRouter.swapExactTokensForTokens(_amountIn, _amountOutMin, _path, _recipient, block.timestamp) returns (
+            uint256[] memory _amounts
+        ) {
             amounts = _amounts;
             err = false;
         } catch Error(string memory _errReason) {
@@ -438,10 +430,14 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         }
     }
 
-    function _finalizeDCA(Position storage position, uint256 tokenInPrice, uint256[] memory outPrices) internal {
+    function _finalizeDCA(
+        Position storage position,
+        uint256 tokenInPrice,
+        uint256[] memory outPrices
+    ) internal {
         UserTx storage userTx = userTxs[position.user][userTxs[position.user].length - 1];
 
-        // Transfer swap out tokens to user's wallet, populate 
+        // Transfer swap out tokens to user's wallet, populate
         address[] memory tokens = new address[](userTx.tokenTxs.length);
         uint256[] memory amounts = new uint256[](userTx.tokenTxs.length);
         for (uint256 i = 0; i < userTx.tokenTxs.length; i++) {
@@ -457,10 +453,33 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
         // Return unused funds from failed swaps
         if ((activeTxAmountSwapped + activeTxFeeTaken) < position.amountDCA) {
-            IERC20(position.tokenIn).safeTransfer(position.user, position.amountDCA - (activeTxAmountSwapped + activeTxFeeTaken));
+            IERC20(position.tokenIn).safeTransfer(
+                position.user,
+                position.amountDCA - (activeTxAmountSwapped + activeTxFeeTaken)
+            );
         }
 
-        emit FinalizeDCA(position.user, position.recipient, position.tokenIn, tokenInPrice, activeTxAmountSwapped, tokens, amounts, outPrices, activeTxFeeTaken);
+        // If lastDCA was before the previous interval, snap it current to prevent instant sequential DCAS while catching up
+        // This would happen if treasury/balance/allowance began reverting DCA executions for an extended period of time
+        if (position.lastDCA < (block.timestamp - position.intervalDCA - position.intervalDCA)) {
+            position.lastDCA = block.timestamp;
+        }
+        // Else last DCA was within the previous interval, add interval instead of snapping to prevent execution drift
+        else {
+            position.lastDCA += position.intervalDCA;
+        }
+
+        emit FinalizeDCA(
+            position.user,
+            position.recipient,
+            position.tokenIn,
+            tokenInPrice,
+            activeTxAmountSwapped,
+            tokens,
+            amounts,
+            outPrices,
+            activeTxFeeTaken
+        );
     }
 
     // ADMINISTRATION
@@ -533,7 +552,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     function fetchUniRouter() public view override returns (address) {
         return address(uniRouter);
     }
-    
+
     function fetchAllowedTokens() public view override returns (address[] memory) {
         return allowedTokens.values();
     }

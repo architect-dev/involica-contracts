@@ -154,11 +154,6 @@
             "type": "bytes32"
           },
           {
-            "internalType": "string",
-            "name": "finalizationReason",
-            "type": "string"
-          },
-          {
             "internalType": "address",
             "name": "recipient",
             "type": "address"
@@ -182,6 +177,11 @@
         "internalType": "uint256",
         "name": "dcasRemaining",
         "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "dcaRevertReason",
+        "type": "string"
       },
       {
         "components": [

@@ -9,6 +9,9 @@ contract InvolicaFetcher {
     IInvolica public involica;
     Oracle public oracle;
 
+    uint256 constant baseGasPrice = 450000;
+    uint256 constant perSwapGasPrice = 195000;
+
     constructor(address _involica, address _oracle) {
         involica = IInvolica(_involica);
         oracle = Oracle(_oracle);
@@ -19,22 +22,19 @@ contract InvolicaFetcher {
         uint256 decimals;
         uint256 price;
     }
-    function fetchTokensData()
-        public
-        view
-        returns ( TokenData[] memory tokensData )
-    {
+
+    function fetchTokensData() public view returns (TokenData[] memory tokensData) {
         address[] memory allowedTokens = involica.fetchAllowedTokens();
         tokensData = new TokenData[](allowedTokens.length + 1);
 
         for (uint256 i = 0; i < (tokensData.length - 1); i++) {
             tokensData[i].token = allowedTokens[i];
             tokensData[i].decimals = IERC20Ext(allowedTokens[i]).decimals();
-            (tokensData[i].price,) = oracle.getPriceUsdc(allowedTokens[i]);
+            (tokensData[i].price, ) = oracle.getPriceUsdc(allowedTokens[i]);
         }
         tokensData[tokensData.length - 1].token = involica.NATIVE_TOKEN();
         tokensData[tokensData.length - 1].decimals = 18;
-        (tokensData[tokensData.length - 1].price,) = oracle.getPriceUsdc(involica.NATIVE_TOKEN());
+        (tokensData[tokensData.length - 1].price, ) = oracle.getPriceUsdc(involica.NATIVE_TOKEN());
     }
 
     function fetchUserData(address _user)
@@ -47,6 +47,7 @@ contract InvolicaFetcher {
             uint256 allowance,
             uint256 balance,
             uint256 dcasRemaining,
+            string memory dcaRevertReason,
             IInvolica.UserTokenData[] memory userTokensData,
             uint256[] memory swapsAmountOutMin
         )
@@ -63,6 +64,10 @@ contract InvolicaFetcher {
             balance = IERC20(position.tokenIn).balanceOf(position.user);
             uint256 limitedValue = allowance < balance ? allowance : balance;
             dcasRemaining = position.amountDCA > 0 ? limitedValue / position.amountDCA : 0;
+
+            uint256 gasEstimation = (baseGasPrice + (position.outs.length * perSwapGasPrice)) * 100e9;
+
+            (, dcaRevertReason) = involica.dcaRevertCondition(_user, gasEstimation);
         }
 
         address[] memory allowedTokens = involica.fetchAllowedTokens();
@@ -79,22 +84,24 @@ contract InvolicaFetcher {
             allowance: type(uint256).max,
             balance: _user.balance
         });
-        
+
         swapsAmountOutMin = new uint256[](position.outs.length);
         for (uint256 i = 0; i < position.outs.length; i++) {
             address[] memory route = oracle.getRoute(position.tokenIn, position.outs[i].token);
-            try IUniswapV2Router(involica.fetchUniRouter()).getAmountsOut(
-                position.amountDCA * position.outs[i].weight / 10_000,
-                route
-            ) returns (uint256[] memory amounts) {
-                swapsAmountOutMin[i] = amounts[amounts.length - 1] * (10_000 - position.outs[i].maxSlippage) / 10_000;
+            try
+                IUniswapV2Router(involica.fetchUniRouter()).getAmountsOut(
+                    (position.amountDCA * position.outs[i].weight) / 10_000,
+                    route
+                )
+            returns (uint256[] memory amounts) {
+                swapsAmountOutMin[i] = (amounts[amounts.length - 1] * (10_000 - position.outs[i].maxSlippage)) / 10_000;
             } catch {
                 swapsAmountOutMin[i] = 0;
             }
         }
     }
 
-    function fetchPairRoute (address token0, address token1) public view returns (address[] memory) {
+    function fetchPairRoute(address token0, address token1) public view returns (address[] memory) {
         return oracle.getRoute(token0, token1);
     }
 }
