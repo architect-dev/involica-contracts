@@ -1,17 +1,12 @@
 /* eslint-disable no-console */
 import hre, { ethers } from 'hardhat'
-import { readContractAddresses } from '../test/utils'
 import { IERC20, Involica } from '../typechain'
 import ERC20ABI from '../data/abi/ERC20.json'
 
 export const exitPosition = async (): Promise<void> => {
   const [signer] = await hre.ethers.getSigners()
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const chainId = hre.network.config.chainId!
 
-  // Get Deployed Involica
-  // const [involicaAddress] = readContractAddresses(chainId, ['involica'])
-  const involicaAddress = '0x6aE0207A1a0e73e26237b6813F83ec46b5F9133E'
+  const involicaAddress = '0x5104B1520b9d789512B85D7Bb0b4680E79A184C0'
   const involica = (await ethers.getContractAt('Involica', involicaAddress)) as Involica
 
   const tokenIn = (await involica.fetchUserPosition(signer.address)).tokenIn

@@ -88,7 +88,7 @@ export const prepare = async (chainId: number): Promise<ThisObject> => {
   thisObject.defaultTreasuryFund = parseEther('0.5')
   thisObject.defaultFund = parseUnits('10000', USDC_DECIMALS)
   thisObject.defaultDCA = thisObject.defaultFund.div(10)
-  thisObject.defaultFee = thisObject.defaultDCA.mul(5).div(10000)
+  thisObject.defaultFee = thisObject.defaultDCA.mul(10).div(10000)
   thisObject.defaultInterval = 60 // second;
   thisObject.wethSwapRoute = [thisObject.usdc.address, thisObject.weth.address]
   thisObject.btcSwapRoute = [thisObject.usdc.address, thisObject.weth.address, thisObject.wbtc.address]

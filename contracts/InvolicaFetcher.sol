@@ -90,7 +90,7 @@ contract InvolicaFetcher {
             address[] memory route = oracle.getRoute(position.tokenIn, position.outs[i].token);
             try
                 IUniswapV2Router(involica.fetchUniRouter()).getAmountsOut(
-                    (position.amountDCA * position.outs[i].weight) / 10_000,
+                    (position.amountDCA * position.outs[i].weight * (10_000 - involica.txFee())) / (10_000 * 10_000),
                     route
                 )
             returns (uint256[] memory amounts) {

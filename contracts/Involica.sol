@@ -47,7 +47,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     EnumerableSet.AddressSet allowedTokens;
     mapping(address => mapping(address => bool)) public blacklistedPairs;
     uint256 public minSlippage = 25;
-    uint256 public txFee = 5;
+    uint256 public override txFee = 10;
     address public resolver;
     address public involicaTreasury;
 

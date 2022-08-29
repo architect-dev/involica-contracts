@@ -91,6 +91,7 @@ interface IInvolica {
 
     // Public
     function NATIVE_TOKEN() external view returns (address);
+    function txFee() external view returns (uint256);
     function fetchUniRouter() external view returns (address);
     function fetchAllowedTokens() external view returns (address[] memory);
     function fetchAllowedToken(uint256 i) external view returns (address);

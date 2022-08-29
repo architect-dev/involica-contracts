@@ -4,7 +4,6 @@ pragma solidity 0.8.12;
 import {IInvolica, IInvolicaResolver} from './interfaces/IInvolica.sol';
 import {IUniswapV2Router} from './interfaces/IUniswapV2Router.sol';
 import './Oracle.sol';
-import 'hardhat/console.sol';
 
 contract InvolicaResolver is IInvolicaResolver {
     IInvolica public involica;
@@ -39,8 +38,10 @@ contract InvolicaResolver is IInvolicaResolver {
 
         for (uint256 i = 0; i < position.outs.length; i++) {
             swapsRoutes[i] = oracle.getRoute(position.tokenIn, position.outs[i].token);
-            amounts = uniRouter.getAmountsOut((position.amountDCA * position.outs[i].weight) / 10_000, swapsRoutes[i]);
-            swapsAmountOutMin[i] = (amounts[amounts.length - 1] * (10_000 - position.outs[i].maxSlippage)) / 10_000;
+
+            // Also take 0.1% tx fee into account
+            amounts = uniRouter.getAmountsOut(position.amountDCA * position.outs[i].weight * (10_000 - involica.txFee()) / (10_000 * 10_000), swapsRoutes[i]);
+            swapsAmountOutMin[i] = amounts[amounts.length - 1] * (10_000 - position.outs[i].maxSlippage) / 10_000;
             (outPrices[i], ) = oracle.getPriceUsdc(position.outs[i].token);
         }
 

@@ -150,8 +150,14 @@ describe('Involica Resolver', function () {
       const wethPrice = (await oracle.getPriceUsdc(weth.address)).price
       const wbtcPrice = (await oracle.getPriceUsdc(wbtc.address)).price
 
-      const wethAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), wethSwapRoute)
-      const wbtcAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), btcSwapRoute)
+      const wethAmounts = await uniRouter.getAmountsOut(
+        defaultDCA.mul(5000).mul(9990).div(10000).div(10000),
+        wethSwapRoute,
+      )
+      const wbtcAmounts = await uniRouter.getAmountsOut(
+        defaultDCA.mul(5000).mul(9990).div(10000).div(10000),
+        btcSwapRoute,
+      )
 
       const wethAmountOutMin: BigNumber = wethAmounts[wethAmounts.length - 1]
         .mul(BigNumber.from(10000).sub(defaultSlippage))
@@ -177,8 +183,14 @@ describe('Involica Resolver', function () {
       const wethPrice = (await oracle.getPriceUsdc(weth.address)).price
       const wbtcPrice = (await oracle.getPriceUsdc(wbtc.address)).price
 
-      const wethAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), wethSwapRoute)
-      const wbtcAmounts = await uniRouter.getAmountsOut(defaultDCA.mul(5000).div(10000), btcSwapRoute)
+      const wethAmounts = await uniRouter.getAmountsOut(
+        defaultDCA.mul(5000).mul(9990).div(10000).div(10000),
+        wethSwapRoute,
+      )
+      const wbtcAmounts = await uniRouter.getAmountsOut(
+        defaultDCA.mul(5000).mul(9990).div(10000).div(10000),
+        btcSwapRoute,
+      )
 
       const wethAmountOutMin: BigNumber = wethAmounts[wethAmounts.length - 1]
         .mul(BigNumber.from(10000).sub(defaultSlippage))

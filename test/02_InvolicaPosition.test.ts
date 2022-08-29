@@ -884,7 +884,7 @@ describe('Involica Position', function () {
       const balanceAssetBefore = await weth.balanceOf(alice.address)
 
       const uniRouter = await ethers.getContractAt('IUniswapV2Router', ROUTER_ADDRESS[chainId])
-      const swapAmounts1 = await uniRouter.getAmountsOut(dcaAmount.mul(9995).div(10000), [usdc.address, weth.address])
+      const swapAmounts1 = await uniRouter.getAmountsOut(dcaAmount.mul(9990).div(10000), [usdc.address, weth.address])
 
       await expect(involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])).to.emit(
         involica,
@@ -906,7 +906,7 @@ describe('Involica Position', function () {
 
       await fastForwardTo(nextDCA.toNumber())
 
-      const swapAmounts2 = await uniRouter.getAmountsOut(dcaAmount.mul(9995).div(10000), [usdc.address, weth.address])
+      const swapAmounts2 = await uniRouter.getAmountsOut(dcaAmount.mul(9990).div(10000), [usdc.address, weth.address])
 
       // ALSO TESTS MANUAL EXECUTION
       await expect(involica.connect(alice).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])).to.emit(
@@ -937,7 +937,7 @@ describe('Involica Position', function () {
       expect(txs[0].tokenTxs.length).to.eq(1)
       expect(txs[0].tokenTxs[0].tokenIn).to.eq(usdc.address)
       expect(txs[0].tokenTxs[0].tokenOut).to.eq(weth.address)
-      expect(txs[0].tokenTxs[0].amountIn).to.eq(dcaAmount.mul(9995).div(10000))
+      expect(txs[0].tokenTxs[0].amountIn).to.eq(dcaAmount.mul(9990).div(10000))
       expect(txs[0].tokenTxs[0].amountOut).to.eq(wethDifference1)
       expect(txs[0].tokenTxs[0].err).to.eq('')
 
@@ -945,7 +945,7 @@ describe('Involica Position', function () {
       expect(txs[1].tokenTxs.length).to.eq(1)
       expect(txs[1].tokenTxs[0].tokenIn).to.eq(usdc.address)
       expect(txs[1].tokenTxs[0].tokenOut).to.eq(weth.address)
-      expect(txs[1].tokenTxs[0].amountIn).to.eq(dcaAmount.mul(9995).div(10000))
+      expect(txs[1].tokenTxs[0].amountIn).to.eq(dcaAmount.mul(9990).div(10000))
       expect(txs[1].tokenTxs[0].amountOut).to.eq(wethDifference2)
       expect(txs[1].tokenTxs[0].err).to.eq('')
 
@@ -1004,13 +1004,13 @@ describe('Involica Position', function () {
 
       expect(txs[0].tokenTxs[0].tokenIn).to.eq(usdc.address)
       expect(txs[0].tokenTxs[0].tokenOut).to.eq(weth.address)
-      expect(txs[0].tokenTxs[0].amountIn).to.eq(defaultDCA.mul(2000).mul(9995).div(10000).div(10000))
+      expect(txs[0].tokenTxs[0].amountIn).to.eq(defaultDCA.mul(2000).mul(9990).div(10000).div(10000))
       expect(txs[0].tokenTxs[0].amountOut).to.eq(wethBalanceAfter.sub(wethBalanceBefore))
       expect(txs[0].tokenTxs[0].err).to.eq('')
 
       expect(txs[0].tokenTxs[1].tokenIn).to.eq(usdc.address)
       expect(txs[0].tokenTxs[1].tokenOut).to.eq(wbtc.address)
-      expect(txs[0].tokenTxs[1].amountIn).to.eq(defaultDCA.mul(8000).mul(9995).div(10000).div(10000))
+      expect(txs[0].tokenTxs[1].amountIn).to.eq(defaultDCA.mul(8000).mul(9990).div(10000).div(10000))
       expect(txs[0].tokenTxs[1].amountOut).to.eq(wbtcBalanceAfter.sub(wbtcBalanceBefore))
       expect(txs[0].tokenTxs[1].err).to.eq('')
 
@@ -1078,7 +1078,7 @@ describe('Involica Position', function () {
 
       expect(txs[0].tokenTxs[0].tokenIn).to.eq(usdc.address)
       expect(txs[0].tokenTxs[0].tokenOut).to.eq(weth.address)
-      expect(txs[0].tokenTxs[0].amountIn).to.eq(defaultDCA.mul(2000).mul(9995).div(10000).div(10000))
+      expect(txs[0].tokenTxs[0].amountIn).to.eq(defaultDCA.mul(2000).mul(9990).div(10000).div(10000))
       expect(txs[0].tokenTxs[0].amountOut).to.eq(wethBalanceAfter.sub(wethBalanceBefore))
       expect(txs[0].tokenTxs[0].err).to.eq('')
 
@@ -1167,7 +1167,7 @@ describe('Involica Position', function () {
 
       expect(txs[0].tokenTxs[0].tokenIn).to.eq(usdc.address)
       expect(txs[0].tokenTxs[0].tokenOut).to.eq(weth.address)
-      expect(txs[0].tokenTxs[0].amountIn).to.eq(defaultDCA.mul(2000).mul(9995).div(10000).div(10000))
+      expect(txs[0].tokenTxs[0].amountIn).to.eq(defaultDCA.mul(2000).mul(9990).div(10000).div(10000))
       expect(txs[0].tokenTxs[0].amountOut).to.eq(wethBalanceAfter.sub(wethBalanceBefore))
       expect(txs[0].tokenTxs[0].err).to.eq('')
 
@@ -1241,7 +1241,7 @@ describe('Involica Position', function () {
       const bobWethBefore = await weth.balanceOf(bob.address)
 
       const uniRouter = await ethers.getContractAt('IUniswapV2Router', ROUTER_ADDRESS[chainId])
-      const swapAmounts1 = await uniRouter.getAmountsOut(dcaAmount.mul(9995).div(10000), [usdc.address, weth.address])
+      const swapAmounts1 = await uniRouter.getAmountsOut(dcaAmount.mul(9990).div(10000), [usdc.address, weth.address])
 
       await expect(involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])).to.emit(
         involica,
