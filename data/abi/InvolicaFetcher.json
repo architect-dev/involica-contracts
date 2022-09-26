@@ -162,6 +162,11 @@
             "internalType": "bool",
             "name": "manualExecutionOnly",
             "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "paused",
+            "type": "bool"
           }
         ],
         "internalType": "struct IInvolica.Position",

@@ -604,39 +604,6 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_user",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "tokenInPrice",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address[][]",
-        "name": "swapsRoutes",
-        "type": "address[][]"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "swapsAmountOutMin",
-        "type": "uint256[]"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "outPrices",
-        "type": "uint256[]"
-      }
-    ],
-    "name": "executeDCA",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "name": "exitPosition",
     "outputs": [],

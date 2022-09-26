@@ -5,17 +5,17 @@ import '@typechain/hardhat'
 import '@nomiclabs/hardhat-etherscan'
 import '@nomiclabs/hardhat-ethers'
 import '@nomiclabs/hardhat-waffle'
+import '@graphprotocol/hardhat-graph'
 import 'hardhat-gas-reporter'
 import 'solidity-coverage'
 import 'hardhat-abi-exporter'
 import 'hardhat-contract-sizer'
 
-import { HardhatUserConfig } from 'hardhat/types'
 import { MNEMONIC, ETHERSCAN_API_KEY } from './constants'
 
 import './tasks/accounts'
 
-const config: HardhatUserConfig = {
+const config = {
   defaultNetwork: 'hardhat',
   solidity: {
     compilers: [
@@ -40,7 +40,8 @@ const config: HardhatUserConfig = {
       allowUnlimitedContractSize: true,
       forking: {
         url: 'https://rpc.ankr.com/fantom',
-        blockNumber: 43868128,
+        blockNumber: 43868128, // TEST BLOCK (fixed)
+        // blockNumber: 47492513, // DEBUGGING BLOCK (changeable)
       },
     },
     ftm_testnet: {
@@ -82,6 +83,12 @@ const config: HardhatUserConfig = {
     runOnCompile: false,
     strict: true,
     only: [':Involica$', ':InvolicaResolver$', ':Oracle'],
+  },
+  subgraph: {
+    name: 'involica',
+  },
+  paths: {
+    subgraph: 'involica-subgraph',
   },
 }
 

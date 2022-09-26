@@ -16,6 +16,7 @@ interface IInvolica {
         bytes32 taskId;
         address recipient;
         bool manualExecutionOnly;
+        bool paused;
     }
     struct PositionOut {
         address token;
@@ -62,6 +63,7 @@ interface IInvolica {
         uint256 maxSlippage,
         uint256 maxGasPrice
     );
+    event PausePosition(address indexed user, bool indexed paused);
     event ExitPosition(address indexed user);
     event DepositTreasury(address indexed user, uint256 indexed amount);
     event WithdrawTreasury(address indexed user, uint256 indexed amount);

@@ -117,9 +117,8 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
     function exitPosition() public positionExists nonReentrant {
         Position storage position = positions[msg.sender];
         _withdrawTreasury(userTreasuries[msg.sender]);
-        position.user = address(0);
-
         _clearTask(position);
+        delete positions[msg.sender];
 
         emit ExitPosition(msg.sender);
     }
@@ -207,7 +206,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             require(out != _tokenIn, 'Same token both sides of pair');
             require(allowedTokens.contains(out), 'Token is not allowed');
             require(!blacklistedPairs[_tokenIn][out], 'Pair is blacklisted');
-            require(_outs[i].maxSlippage >= minSlippage, 'Invalid slippage');
+            require(_outs[i].maxSlippage >= minSlippage && _outs[i].maxSlippage < 10_000, 'Invalid slippage');
             require(_outs[i].weight > 0, 'Non zero weight');
             weightsSum += _outs[i].weight;
             position.outs.push(PositionOut({token: out, weight: _outs[i].weight, maxSlippage: _outs[i].maxSlippage}));
@@ -233,6 +232,14 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             // Clear existing task if necessary
             _clearTask(positions[msg.sender]);
         }
+    }
+
+    function pausePosition(bool _paused) public whenNotPaused nonReentrant {
+        Position storage position = positions[msg.sender];
+        require(position.user != address(0), 'User doesnt have a position');
+        position.paused = _paused;
+
+        emit PausePosition(msg.sender, _paused);
     }
 
     function _initializeTask(Position storage _position) internal {
@@ -506,12 +513,14 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
         // If lastDCA was before the previous interval, snap it current to prevent instant sequential DCAS while catching up
         // This would happen if treasury/balance/allowance began reverting DCA executions for an extended period of time
-        if (position.lastDCA < (block.timestamp - position.intervalDCA - position.intervalDCA)) {
-            position.lastDCA = block.timestamp;
-        }
-        // Else last DCA was within the previous interval, add interval instead of snapping to prevent execution drift
-        else {
-            position.lastDCA += position.intervalDCA;
+        if (msg.sender == ops) {
+            if (position.lastDCA < (block.timestamp - position.intervalDCA - position.intervalDCA)) {
+                position.lastDCA = block.timestamp;
+            }
+            // Else last DCA was within the previous interval, add interval instead of snapping to prevent execution drift
+            else {
+                position.lastDCA += position.intervalDCA;
+            }
         }
 
         emit FinalizeDCA(
