@@ -888,7 +888,7 @@ describe('Involica Position', function () {
 
       await expect(involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])).to.emit(
         involica,
-        'FinalizeDCA',
+        'ExecuteDCA',
       )
 
       const balanceFundAfter = await usdc.balanceOf(alice.address)
@@ -911,7 +911,7 @@ describe('Involica Position', function () {
       // ALSO TESTS MANUAL EXECUTION
       await expect(involica.connect(alice).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])).to.emit(
         involica,
-        'FinalizeDCA',
+        'ExecuteDCA',
       )
 
       const balanceFundFinal = await usdc.balanceOf(alice.address)
@@ -1021,11 +1021,12 @@ describe('Involica Position', function () {
       const txFee = defaultFee
 
       expect(tx)
-        .to.emit(involica, 'FinalizeDCA')
+        .to.emit(involica, 'ExecuteDCA')
         .withArgs(
           alice.address,
           alice.address,
           usdc.address,
+          false,
           1e6,
           amountSwapped,
           outTokens,
@@ -1245,7 +1246,7 @@ describe('Involica Position', function () {
 
       await expect(involica.connect(opsSigner).executeDCA(alice.address, 1e6, [wethSwapRoute], [0], [0])).to.emit(
         involica,
-        'FinalizeDCA',
+        'ExecuteDCA',
       )
 
       const bobWethAfter = await weth.balanceOf(bob.address)

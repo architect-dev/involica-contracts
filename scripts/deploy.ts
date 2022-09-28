@@ -2,10 +2,9 @@
 import hre from 'hardhat'
 import { OPS_ADDRESS, ROUTER_ADDRESS, USDC_ADDRESS, WNATIVE_ADDRESS } from '../constants'
 import { failableVerify, writeContractAddresses } from '../test/utils'
-import { syncTokens } from './syncTokens'
 
 async function main() {
-  const [signer] = await hre.ethers.getSigners()
+  const [signerOld, signer] = await hre.ethers.getSigners()
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const chainId = hre.network.config.chainId!
 

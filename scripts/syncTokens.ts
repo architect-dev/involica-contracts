@@ -6,7 +6,7 @@ import { Involica } from '../typechain'
 import { getAddress } from 'ethers/lib/utils'
 
 export const syncTokens = async (): Promise<void> => {
-  const [signer] = await hre.ethers.getSigners()
+  const [signerOld, signer] = await hre.ethers.getSigners()
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const chainId = hre.network.config.chainId!
 

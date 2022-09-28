@@ -3,5 +3,10 @@
     "Involica": {
       "address": "0x9548d89bB371988bf830bcE73E2d9fDC0925edb6"
     }
+  },
+  "fantom": {
+    "Involica": {
+      "address": "0x9548d89bB371988bf830bcE73E2d9fDC0925edb6"
+    }
   }
 }

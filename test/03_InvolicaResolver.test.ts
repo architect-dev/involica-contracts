@@ -214,7 +214,7 @@ describe('Involica Resolver', function () {
         data: taskData,
       })
 
-      expect(tx).to.emit(involica, 'FinalizeDCA')
+      expect(tx).to.emit(involica, 'ExecuteDCA')
     })
   })
 })

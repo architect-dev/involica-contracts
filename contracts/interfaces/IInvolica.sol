@@ -71,10 +71,11 @@ interface IInvolica {
     event InitializeTask(address indexed user, bytes32 taskId);
     event ClearTask(address indexed user, bytes32 taskId);
 
-    event FinalizeDCA(
+    event ExecuteDCA(
         address indexed user,
         address indexed recipient,
         address indexed tokenIn,
+        bool manualExecution,
         uint256 inAmount,
         uint256 inPrice,
         address[] outTokens,

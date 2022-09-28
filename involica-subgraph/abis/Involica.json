@@ -71,19 +71,6 @@
         "internalType": "address",
         "name": "user",
         "type": "address"
-      }
-    ],
-    "name": "ExitPosition",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
       },
       {
         "indexed": true,
@@ -96,6 +83,12 @@
         "internalType": "address",
         "name": "tokenIn",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "manualExecution",
+        "type": "bool"
       },
       {
         "indexed": false,
@@ -134,7 +127,20 @@
         "type": "uint256"
       }
     ],
-    "name": "FinalizeDCA",
+    "name": "ExecuteDCA",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "ExitPosition",
     "type": "event"
   },
   {

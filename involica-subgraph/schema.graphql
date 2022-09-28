@@ -1,6 +1,61 @@
-type ExampleEntity @entity {
+type Involica @entity {
+  # Global stats of the involica contract
   id: ID!
-  count: BigInt!
-  user: Bytes! # address
-  taskId: Bytes! # bytes32
+
+  totalDcasCount: Int!
+  totalManualDcasCount: Int!
+  totalInvolicaTxFee: BigInt!
+  totalTradeAmountUsd: BigDecimal!
+
+  inTokens: [Bytes!]!
+  inAmounts: [BigInt!]!
+
+  outTokens: [Bytes!]!
+  outAmounts: [BigInt!]!
+}
+
+type Portfolio @entity {
+  # user address
+  id: ID!
+
+  dcasCount: Int!
+  manualDcasCount: Int!
+  involicaTxFee: BigInt!
+
+  inTokens: [Bytes!]!
+  inAmounts: [BigInt!]!
+
+  outTokens: [Bytes!]!
+  outAmounts: [BigInt!]!
+}
+
+type DCA @entity {
+  id: ID!
+  user: Bytes!
+
+  # dca execution
+
+  recipient: Bytes!
+  manualExecution: Boolean!
+  timestamp: BigInt!
+
+  inToken: Bytes!
+  inAmount: BigInt!
+
+  outTokens: [Bytes!]!
+  outAmounts: [BigInt!]!
+
+  involicaTxFee: BigInt!
+
+  # portfolio data
+
+  portfolioInTokens: [Bytes!]!
+  portfolioInAmounts: [BigInt!]!
+
+  portfolioOutTokens: [Bytes!]!
+  portfolioOutAmounts: [BigInt!]!
+
+  dcasCount: Int!
+  manualDcasCount: Int!
+  totalInvolicaTxFee: BigInt!
 }

@@ -364,7 +364,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
         _executeDCASwaps(position, tokenInPrice, swapsRoutes, swapsAmountOutMin);
 
         // Send unused in and all swapped outs back to users wallet
-        _finalizeDCA(position, tokenInPrice, outPrices);
+        _finalizeDCA(position, msg.sender == _user, tokenInPrice, outPrices);
     }
 
     uint256 activeTxAmountSwapped = 0;
@@ -484,6 +484,7 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
 
     function _finalizeDCA(
         Position storage position,
+        bool manualExecution,
         uint256 tokenInPrice,
         uint256[] memory outPrices
     ) internal {
@@ -523,10 +524,11 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             }
         }
 
-        emit FinalizeDCA(
+        emit ExecuteDCA(
             position.user,
             position.recipient,
             position.tokenIn,
+            manualExecution,
             tokenInPrice,
             activeTxAmountSwapped,
             tokens,

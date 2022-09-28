@@ -417,7 +417,7 @@ describe('Integration Test: Gelato DCA', function () {
           payload2,
         )
 
-      expect(execTx2).to.emit(involica, 'FinalizeDCA')
+      expect(execTx2).to.emit(involica, 'ExecuteDCA')
     })
     it('depositing treasury funds should not re-initialize task if allowance or balance insufficient', async () => {
       // Create position and drain it

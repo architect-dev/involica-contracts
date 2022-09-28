@@ -3,4 +3,4 @@ artifacts
 cache
 coverage*
 gasReporterOutput.json
-involica-subgraph
+involica-subgraph/generated

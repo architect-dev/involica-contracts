@@ -86,6 +86,7 @@ const config = {
   },
   subgraph: {
     name: 'involica',
+    product: 'hosted-service',
   },
   paths: {
     subgraph: 'involica-subgraph',
