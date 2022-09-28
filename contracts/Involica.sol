@@ -528,13 +528,13 @@ contract Involica is OpsReady, IInvolica, Ownable, Pausable, ReentrancyGuard {
             position.user,
             position.recipient,
             position.tokenIn,
-            manualExecution,
-            tokenInPrice,
             activeTxAmountSwapped,
+            tokenInPrice,
             tokens,
             amounts,
             outPrices,
-            activeTxFeeTaken
+            activeTxFeeTaken,
+            manualExecution
         );
     }
 

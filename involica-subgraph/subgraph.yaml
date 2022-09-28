@@ -6,9 +6,9 @@ dataSources:
     name: Involica
     network: fantom
     source:
-      address: "0xE250be24124552FCeAA5025292d973C6FbeFE44E"
+      address: "0xf2b957f889d8479cfb78b3e207dc6f283f7a6a79"
       abi: Involica
-      startBlock: 47406143
+      startBlock: 47971305
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
@@ -21,6 +21,7 @@ dataSources:
         - name: Involica
           file: ./abis/Involica.json
       eventHandlers:
-        - event: ExecuteDCA(indexed address,indexed address,indexed address,bool,uint256,uint256,address[],uint256[],uint256[],uint256)
+        - event: ExecuteDCA(indexed address,indexed address,indexed
+            address,uint256,uint256,address[],uint256[],uint256[],uint256,bool)
           handler: handleExecuteDCA
       file: ./src/involica.ts

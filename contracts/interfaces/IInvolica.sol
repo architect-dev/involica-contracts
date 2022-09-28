@@ -75,13 +75,13 @@ interface IInvolica {
         address indexed user,
         address indexed recipient,
         address indexed tokenIn,
-        bool manualExecution,
         uint256 inAmount,
         uint256 inPrice,
         address[] outTokens,
         uint256[] outAmounts,
         uint256[] outPrices,
-        uint256 involicaTxFee
+        uint256 involicaTxFee,
+        bool manualExecution
     );
 
     event SetInvolicaTreasury(address indexed treasury);

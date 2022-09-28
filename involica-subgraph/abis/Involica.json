@@ -86,12 +86,6 @@
       },
       {
         "indexed": false,
-        "internalType": "bool",
-        "name": "manualExecution",
-        "type": "bool"
-      },
-      {
-        "indexed": false,
         "internalType": "uint256",
         "name": "inAmount",
         "type": "uint256"
@@ -125,6 +119,12 @@
         "internalType": "uint256",
         "name": "involicaTxFee",
         "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "manualExecution",
+        "type": "bool"
       }
     ],
     "name": "ExecuteDCA",
