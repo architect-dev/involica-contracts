@@ -56,13 +56,6 @@ interface IInvolica {
         uint256 maxGasPrice,
         bool manualExecutionOnly
     );
-    event PositionUpdated(
-        address indexed user,
-        uint256 indexed amountDCA,
-        uint256 indexed intervalDCA,
-        uint256 maxSlippage,
-        uint256 maxGasPrice
-    );
     event PausePosition(address indexed user, bool indexed paused);
     event ExitPosition(address indexed user);
     event DepositTreasury(address indexed user, uint256 indexed amount);

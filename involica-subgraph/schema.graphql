@@ -2,16 +2,31 @@ type Involica @entity {
   # Global stats of the involica contract
   id: ID!
 
+  totalUserCount: Int!
   totalDcasCount: Int!
   totalManualDcasCount: Int!
-  totalInvolicaTxFee: BigInt!
+  totalInvolicaTxFeeUsd: BigDecimal!
   totalTradeAmountUsd: BigDecimal!
 
   inTokens: [Bytes!]!
-  inAmounts: [BigInt!]!
+  inAmounts: [BigDecimal!]!
 
   outTokens: [Bytes!]!
-  outAmounts: [BigInt!]!
+  outAmounts: [BigDecimal!]!
+}
+
+type InvolicaSnapshot @entity {
+  id: ID!
+  userCount: Int!
+  dcasCount: Int!
+
+  inTokens: [Bytes!]!
+  inAmounts: [BigDecimal!]!
+  inPrices: [BigDecimal!]!
+
+  outTokens: [Bytes!]!
+  outAmounts: [BigDecimal!]!
+  outPrices: [BigDecimal!]!
 }
 
 type Portfolio @entity {
@@ -20,13 +35,13 @@ type Portfolio @entity {
 
   dcasCount: Int!
   manualDcasCount: Int!
-  involicaTxFee: BigInt!
+  involicaTxFeeUsd: BigDecimal!
 
   inTokens: [Bytes!]!
-  inAmounts: [BigInt!]!
+  inAmounts: [BigDecimal!]!
 
   outTokens: [Bytes!]!
-  outAmounts: [BigInt!]!
+  outAmounts: [BigDecimal!]!
 }
 
 type DCA @entity {
@@ -40,22 +55,37 @@ type DCA @entity {
   timestamp: BigInt!
 
   inToken: Bytes!
-  inAmount: BigInt!
+  inAmount: BigDecimal!
+  inPrice: BigDecimal!
 
   outTokens: [Bytes!]!
-  outAmounts: [BigInt!]!
+  outAmounts: [BigDecimal!]!
+  outPrices: [BigDecimal!]!
 
-  involicaTxFee: BigInt!
+  involicaTxFeeUsd: BigDecimal!
 
   # portfolio data
 
   portfolioInTokens: [Bytes!]!
-  portfolioInAmounts: [BigInt!]!
+  portfolioInAmounts: [BigDecimal!]!
 
   portfolioOutTokens: [Bytes!]!
-  portfolioOutAmounts: [BigInt!]!
+  portfolioOutAmounts: [BigDecimal!]!
 
   dcasCount: Int!
   manualDcasCount: Int!
-  totalInvolicaTxFee: BigInt!
+  totalInvolicaTxFeeUsd: BigDecimal!
+}
+
+type PositionConfig @entity {
+  id: ID!
+  user: Bytes!
+
+  # position data
+  inToken: Bytes!
+  inAmount: BigDecimal!
+
+  outTokens: [Bytes!]!
+  outWeights: [Int!]!
+  outSlippages: [Int!]!
 }

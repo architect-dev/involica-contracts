@@ -4,9 +4,8 @@ import { readContractAddresses } from '../test/utils'
 import { Involica, InvolicaFetcher, InvolicaResolver, Oracle } from '../typechain'
 import uniabi from './uniabi.json'
 
-
 export const checkOnTask = async (): Promise<void> => {
-  const [signer] = await hre.ethers.getSigners()
+  const [_, expedition] = await hre.ethers.getSigners()
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const chainId = 250
 
@@ -24,7 +23,7 @@ export const checkOnTask = async (): Promise<void> => {
   const fetcher = (await ethers.getContractAt('InvolicaFetcher', fetcherAdd)) as InvolicaFetcher
   const oracle = (await ethers.getContractAt('Oracle', oracleAdd)) as Oracle
 
-  const position = await involica.fetchUserPosition(signer.address)
+  const position = await involica.fetchUserPosition(expedition.address)
   console.log({
     position,
   })

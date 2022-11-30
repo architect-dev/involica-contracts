@@ -6,7 +6,7 @@ dataSources:
     name: Involica
     network: fantom
     source:
-      address: "0xf2b957f889d8479cfb78b3e207dc6f283f7a6a79"
+      address: '0xf2b957f889d8479cfb78b3e207dc6f283f7a6a79'
       abi: Involica
       startBlock: 47971305
     mapping:
@@ -15,13 +15,18 @@ dataSources:
       language: wasm/assemblyscript
       entities:
         - Involica
+        - InvolicaSnapshot
         - Portfolio
         - DCA
       abis:
         - name: Involica
           file: ./abis/Involica.json
+        - name: ERC20
+          file: ./abis/ERC20.json
       eventHandlers:
         - event: ExecuteDCA(indexed address,indexed address,indexed
             address,uint256,uint256,address[],uint256[],uint256[],uint256,bool)
           handler: handleExecuteDCA
+        - event: SetPosition(indexed address,indexed address,address,(address,uint256,uint256)[],uint256,uint256,uint256,bool)
+          handler: handleSetPosition
       file: ./src/involica.ts

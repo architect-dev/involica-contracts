@@ -1,12 +1,13 @@
 import { Address, BigDecimal, BigInt } from '@graphprotocol/graph-ts'
-import { Involica, Portfolio } from '../generated/schema'
+import { ERC20 } from '../generated/Involica/ERC20'
+import { Involica, InvolicaSnapshot, Portfolio } from '../generated/schema'
 
 export const createPortfolio = (user: Address): Portfolio => {
   const portfolio = new Portfolio(user.toHex())
 
   portfolio.dcasCount = 0
   portfolio.manualDcasCount = 0
-  portfolio.involicaTxFee = BigInt.fromI32(0)
+  portfolio.involicaTxFeeUsd = BigDecimal.fromString('0')
 
   portfolio.inTokens = []
   portfolio.inAmounts = []
@@ -20,9 +21,10 @@ export const createPortfolio = (user: Address): Portfolio => {
 export const createInvolica = (): Involica => {
   const involica = new Involica('1')
 
+  involica.totalUserCount = 0
   involica.totalDcasCount = 0
   involica.totalManualDcasCount = 0
-  involica.totalInvolicaTxFee = BigInt.fromI32(0)
+  involica.totalInvolicaTxFeeUsd = BigDecimal.fromString('0')
   involica.totalTradeAmountUsd = BigDecimal.fromString('0')
 
   involica.inTokens = []
@@ -32,6 +34,23 @@ export const createInvolica = (): Involica => {
   involica.outAmounts = []
 
   return involica
+}
+
+export const createInvolicaSnapshot = (dayTimestamp: number): InvolicaSnapshot => {
+  const snapshot = new InvolicaSnapshot(dayTimestamp.toString())
+
+  snapshot.userCount = 0
+  snapshot.dcasCount = 0
+
+  snapshot.inTokens = []
+  snapshot.inAmounts = []
+  snapshot.inPrices = []
+
+  snapshot.outTokens = []
+  snapshot.outAmounts = []
+  snapshot.outPrices = []
+
+  return snapshot
 }
 
 export const ZERO_BI = BigInt.fromI32(0)
@@ -58,4 +77,20 @@ export function convertTokenToDecimal(tokenAmount: BigInt, exchangeDecimals: Big
     return tokenAmount.toBigDecimal()
   }
   return tokenAmount.toBigDecimal().div(exponentToBigDecimal(exchangeDecimals))
+}
+
+export function fetchTokenDecimals(tokenAddress: Address): BigInt {
+  // return BigInt.fromI32(0)
+  const contract = ERC20.bind(tokenAddress)
+  // try types uint8 for decimals
+  const decimalResult = contract.try_decimals()
+  if (!decimalResult.reverted) {
+    return BigInt.fromI32(decimalResult.value as i32)
+  }
+  return BigInt.fromI32(18)
+}
+
+export function tokenAndAmountToDecimal(token: Address, amount: BigInt): BigDecimal {
+  const decimals = fetchTokenDecimals(token)
+  return convertTokenToDecimal(amount, decimals)
 }

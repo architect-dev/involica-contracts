@@ -53,6 +53,21 @@ describe('Describe entity assertions', () => {
       log.info('portfolio in token 0 = {}', [portfolio.inTokens[0].toHexString()])
       log.info('portfolio out tokens = {}', [portfolio.outTokens.map<string>((addr) => addr.toHexString()).join(', ')])
     }
+
+    const secondExecuteDCAEvent = createExecuteDCAEvent(
+      user,
+      zeroAddress,
+      tokenInAddress,
+      BigInt.fromI32(100),
+      BigInt.fromI32(100),
+      [tokenOutAddress1, tokenOutAddress2, tokenOutAddress1],
+      [BigInt.fromI32(50), BigInt.fromI32(250), BigInt.fromI32(0)],
+      [BigInt.fromI32(210000), BigInt.fromI32(35600), BigInt.fromI32(10)],
+      BigInt.fromI32(5000),
+      false,
+    )
+
+    handleExecuteDCA(secondExecuteDCAEvent)
     // assert.entityCount('DCA', 1)
 
     // // 0xa16081f360e3847006db660bae1c6d1b2e17ec2a is the default address used in newMockEvent() function
